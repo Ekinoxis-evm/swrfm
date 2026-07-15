@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+/* SWR palette — continuity with the station pages the team already knows */
+@theme {
+  --color-cream: #fef9f3;
+  --color-surface: #ffffff;
+  --color-surface-2: #f5ede3;
+  --color-surface-3: #ede0d0;
+  --color-line: #e0d0be;
+  --color-line-2: #cbbda8;
+  --color-ink: #1f0d10;
+  --color-ink-2: #3d2a2d;
+  --color-ink-3: #7a6060;
+  --color-brand: #8a6a20;
+  --color-brand-soft: #f0e0b0;
+  --color-pine: #58633d;
+  --color-pine-soft: #d8ddca;
+  --color-sea: #24476c;
+  --color-sea-soft: #d0dce8;
+  --color-coral: #a84030;
+  --color-coral-soft: #f0ccc0;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
