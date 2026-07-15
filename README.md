@@ -4,6 +4,14 @@ Master inventory system for **Southwest Ranches Farmers Market** — built by [E
 
 One source of truth for inventory across every sales channel: the physical market (Toast POS), the Shopify online store, and traveling pop-up sales — with per-person accounts, real-time collaborative editing, and a vendor portal for accounts payable.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Login](docs/screenshots/01-login.png) | ![Dashboard](docs/screenshots/02-dashboard.png) |
+| ![Inventory](docs/screenshots/03-inventory.png) | ![Product page](docs/screenshots/04-product-page.png) |
+| ![Receiving](docs/screenshots/05-receiving.png) | ![Market day](docs/screenshots/06-market-day.png) |
+
 ## Stack
 
 - **Next.js** (App Router, TypeScript, Tailwind CSS v4)
