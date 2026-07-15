@@ -1,6 +1,10 @@
 'use client'
 
+// Inventory hub: live levels, inline count & remove actions on each row,
+// expiry highlighting, and links to each product's own page.
+
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
 type Row = {
@@ -11,50 +15,41 @@ type Row = {
   price_cents: number | null
   shopify_handle: string | null
   on_hand: number
+  next_expiry: string | null
+}
+
+type EditMode = { guid: string; kind: 'count' | 'remove' } | null
+
+function daysUntil(date: string | null): number | null {
+  if (!date) return null
+  return Math.ceil((new Date(date + 'T00:00:00').getTime() - Date.now()) / 86400000)
+}
+
+function ExpiryBadge({ date }: { date: string | null }) {
+  const days = daysUntil(date)
+  if (days == null) return <span className="text-xs text-ink-3">—</span>
+  const tone =
+    days <= 3 ? 'bg-coral text-white' : days <= 7 ? 'bg-brand-soft text-brand' : 'bg-surface-2 text-ink-2'
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${tone}`}>
+      {date}{' '}
+      <span className="opacity-75">({days}d)</span>
+    </span>
+  )
 }
 
 export default function InventoryPage() {
   const [rows, setRows] = useState<Row[]>([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState<string | null>(null)
-  const [countVal, setCountVal] = useState('')
+  const [edit, setEdit] = useState<EditMode>(null)
+  const [val, setVal] = useState('')
   const [saving, setSaving] = useState(false)
-
-  async function saveCount(row: Row) {
-    const counted = Number(countVal)
-    if (!Number.isFinite(counted) || counted < 0) return
-    setSaving(true)
-    const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    const delta = counted - row.on_hand
-    if (delta !== 0) {
-      const { error } = await supabase.from('inventory_movements').insert({
-        toast_guid: row.toast_guid,
-        delta,
-        reason: 'count_adjust',
-        note: `count: ${row.on_hand} → ${counted}`,
-        created_by: user?.id,
-      })
-      if (error) {
-        alert(error.message)
-        setSaving(false)
-        return
-      }
-      setRows((prev) =>
-        prev.map((r) => (r.toast_guid === row.toast_guid ? { ...r, on_hand: counted } : r))
-      )
-    }
-    setEditing(null)
-    setSaving(false)
-  }
 
   useEffect(() => {
     const supabase = createClient()
     async function load() {
-      const [{ data: products }, { data: levels }] = await Promise.all([
+      const [{ data: products }, { data: levels }, { data: expiry }] = await Promise.all([
         supabase
           .from('products')
           .select('toast_guid, name, category, vendor_name, price_cents, shopify_handle')
@@ -62,10 +57,16 @@ export default function InventoryPage() {
           .order('name')
           .limit(2000),
         supabase.from('inventory_levels').select('toast_guid, on_hand'),
+        supabase.from('product_next_expiry').select('toast_guid, next_expiry'),
       ])
       const level = new Map((levels ?? []).map((l) => [l.toast_guid, Number(l.on_hand)]))
+      const exp = new Map((expiry ?? []).map((e) => [e.toast_guid, e.next_expiry as string]))
       setRows(
-        (products ?? []).map((p) => ({ ...p, on_hand: level.get(p.toast_guid) ?? 0 })) as Row[]
+        (products ?? []).map((p) => ({
+          ...p,
+          on_hand: level.get(p.toast_guid) ?? 0,
+          next_expiry: exp.get(p.toast_guid) ?? null,
+        })) as Row[]
       )
       setLoading(false)
     }
@@ -102,13 +103,71 @@ export default function InventoryPage() {
     )
   }, [rows, q])
 
+  async function save(row: Row) {
+    const n = Number(val)
+    if (!Number.isFinite(n) || n < 0 || !edit) return
+    setSaving(true)
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (edit.kind === 'count') {
+      const delta = n - row.on_hand
+      if (delta !== 0) {
+        const { error } = await supabase.from('inventory_movements').insert({
+          toast_guid: row.toast_guid,
+          delta,
+          reason: 'count_adjust',
+          note: `count: ${row.on_hand} → ${n}`,
+          created_by: user?.id,
+        })
+        if (error) {
+          alert(error.message)
+          setSaving(false)
+          return
+        }
+        setRows((prev) =>
+          prev.map((r) => (r.toast_guid === row.toast_guid ? { ...r, on_hand: n } : r))
+        )
+      }
+    } else {
+      if (n > 0) {
+        const { data: removal, error } = await supabase
+          .from('removals')
+          .insert({ toast_guid: row.toast_guid, item_name: row.name, qty: n, removed_by: user?.id })
+          .select('id')
+          .single()
+        if (error) {
+          alert(error.message)
+          setSaving(false)
+          return
+        }
+        await supabase.from('inventory_movements').insert({
+          toast_guid: row.toast_guid,
+          delta: -n,
+          reason: 'removal',
+          ref_id: removal.id,
+          created_by: user?.id,
+        })
+        setRows((prev) =>
+          prev.map((r) =>
+            r.toast_guid === row.toast_guid ? { ...r, on_hand: r.on_hand - n } : r
+          )
+        )
+      }
+    }
+    setEdit(null)
+    setSaving(false)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Master inventory</h1>
           <p className="text-sm text-ink-3">
-            {loading ? 'Loading…' : `${rows.length} products · live levels update in real time`}
+            {loading ? 'Loading…' : `${rows.length} products · tap a number to count, − to remove`}
           </p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
@@ -133,81 +192,99 @@ export default function InventoryPage() {
             <tr className="border-b border-line-2 bg-surface-2 text-left text-[11px] uppercase tracking-wide text-ink-3">
               <th className="px-4 py-3">Product</th>
               <th className="px-4 py-3">Vendor</th>
-              <th className="px-4 py-3">Category</th>
+              <th className="px-4 py-3">Next expiry</th>
               <th className="px-4 py-3 text-right">Price</th>
-              <th className="px-4 py-3 text-center">Links</th>
               <th className="px-4 py-3 text-right">On hand</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {filtered.slice(0, 200).map((r) => (
-              <tr key={r.toast_guid} className="hover:bg-cream">
-                <td className="px-4 py-2.5 font-semibold">{r.name}</td>
-                <td className="px-4 py-2.5 text-ink-3">{r.vendor_name ?? '—'}</td>
-                <td className="px-4 py-2.5 text-ink-3">{r.category ?? '—'}</td>
-                <td className="px-4 py-2.5 text-right">
-                  {r.price_cents != null ? `$${(r.price_cents / 100).toFixed(2)}` : '—'}
-                </td>
-                <td className="px-4 py-2.5 text-center">
-                  <span className="rounded bg-sea-soft px-1.5 py-0.5 text-[10px] font-bold text-sea">
-                    TOAST
-                  </span>{' '}
-                  {r.shopify_handle && (
-                    <span className="rounded bg-pine-soft px-1.5 py-0.5 text-[10px] font-bold text-pine">
-                      SHOPIFY
-                    </span>
-                  )}
-                </td>
-                <td
-                  className={`px-4 py-2.5 text-right font-bold ${r.on_hand <= 0 ? 'text-coral' : 'text-ink'}`}
-                >
-                  {editing === r.toast_guid ? (
-                    <span className="flex items-center justify-end gap-1.5">
-                      <input
-                        autoFocus
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={countVal}
-                        onChange={(e) => setCountVal(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') saveCount(r)
-                          if (e.key === 'Escape') setEditing(null)
-                        }}
-                        className="w-20 rounded-lg border border-brand bg-cream px-2 py-1.5 text-right font-bold outline-none"
-                      />
-                      <button
-                        onClick={() => saveCount(r)}
-                        disabled={saving}
-                        className="rounded-lg bg-pine px-2.5 py-1.5 text-xs font-bold text-white disabled:opacity-40"
-                      >
-                        ✓
-                      </button>
-                      <button
-                        onClick={() => setEditing(null)}
-                        className="rounded-lg bg-surface-3 px-2.5 py-1.5 text-xs font-bold text-ink-3"
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setEditing(r.toast_guid)
-                        setCountVal(String(r.on_hand))
-                      }}
-                      title="Count / adjust this product"
-                      className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-brand-soft"
+            {filtered.slice(0, 200).map((r) => {
+              const isEditing = edit?.guid === r.toast_guid
+              return (
+                <tr key={r.toast_guid} className="hover:bg-cream">
+                  <td className="px-4 py-2.5">
+                    <Link
+                      href={`/products/${r.toast_guid}`}
+                      className="font-semibold hover:text-sea hover:underline"
                     >
-                      {r.on_hand}
-                      <span className="text-xs text-ink-3 opacity-60 group-hover:opacity-100">
-                        ✎
+                      {r.name}
+                    </Link>
+                    <div className="text-[11px] text-ink-3">{r.category ?? ''}</div>
+                  </td>
+                  <td className="px-4 py-2.5 text-ink-3">{r.vendor_name ?? '—'}</td>
+                  <td className="px-4 py-2.5">
+                    <ExpiryBadge date={r.next_expiry} />
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    {r.price_cents != null ? `$${(r.price_cents / 100).toFixed(2)}` : '—'}
+                  </td>
+                  <td
+                    className={`px-4 py-2.5 text-right font-bold ${r.on_hand <= 0 ? 'text-coral' : 'text-ink'}`}
+                  >
+                    {isEditing ? (
+                      <span className="flex items-center justify-end gap-1.5">
+                        <span className="text-[10px] font-bold uppercase text-ink-3">
+                          {edit!.kind === 'count' ? 'counted' : 'remove'}
+                        </span>
+                        <input
+                          autoFocus
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={val}
+                          onChange={(e) => setVal(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') save(r)
+                            if (e.key === 'Escape') setEdit(null)
+                          }}
+                          className="w-20 rounded-lg border border-brand bg-cream px-2 py-1.5 text-right font-bold outline-none"
+                        />
+                        <button
+                          onClick={() => save(r)}
+                          disabled={saving}
+                          className="rounded-lg bg-pine px-2.5 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          onClick={() => setEdit(null)}
+                          className="rounded-lg bg-surface-3 px-2.5 py-1.5 text-xs font-bold text-ink-3"
+                        >
+                          ✕
+                        </button>
                       </span>
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setEdit({ guid: r.toast_guid, kind: 'count' })
+                          setVal(String(r.on_hand))
+                        }}
+                        title="Count / adjust"
+                        className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-brand-soft"
+                      >
+                        {r.on_hand}
+                        <span className="text-xs text-ink-3 opacity-60 group-hover:opacity-100">✎</span>
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-2 py-2.5 text-right">
+                    {!isEditing && (
+                      <button
+                        onClick={() => {
+                          setEdit({ guid: r.toast_guid, kind: 'remove' })
+                          setVal('1')
+                        }}
+                        title="Remove from cooler (logged & signed off)"
+                        className="rounded-lg bg-coral-soft px-2.5 py-1 text-xs font-bold text-coral hover:bg-coral hover:text-white"
+                      >
+                        −
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
         {filtered.length > 200 && (

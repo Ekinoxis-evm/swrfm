@@ -17,6 +17,7 @@ type Line = {
   received_qty: number
   unit: string
   note: string | null
+  expires_on: string | null
   updated_by: string | null
   version: number
 }
@@ -51,7 +52,7 @@ export default function ReceivingEditor({
   const loadLines = useCallback(async () => {
     const { data } = await supabase
       .from('receiving_lines')
-      .select('id, toast_guid, invoiced_qty, received_qty, unit, note, updated_by, version')
+      .select('id, toast_guid, invoiced_qty, received_qty, unit, note, expires_on, updated_by, version')
       .eq('session_id', sessionId)
       .order('id')
     if (data) setLines(data as Line[])
@@ -86,6 +87,7 @@ export default function ReceivingEditor({
               if (focused.current === `${l.id}:invoiced_qty`) merged.invoiced_qty = l.invoiced_qty
               if (focused.current === `${l.id}:received_qty`) merged.received_qty = l.received_qty
               if (focused.current === `${l.id}:note`) merged.note = l.note
+              if (focused.current === `${l.id}:expires_on`) merged.expires_on = l.expires_on
               return merged
             })
           })
@@ -119,7 +121,7 @@ export default function ReceivingEditor({
     if (error && !error.message.includes('duplicate')) alert(error.message)
   }
 
-  async function saveField(line: Line, field: 'invoiced_qty' | 'received_qty' | 'note', value: number | string | null) {
+  async function saveField(line: Line, field: 'invoiced_qty' | 'received_qty' | 'note' | 'expires_on', value: number | string | null) {
     setLines((prev) => prev.map((l) => (l.id === line.id ? { ...l, [field]: value } : l)))
     await supabase
       .from('receiving_lines')
@@ -271,7 +273,7 @@ export default function ReceivingEditor({
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {(['invoiced_qty', 'received_qty'] as const).map((field) => (
                   <div key={field}>
                     <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-3">
@@ -292,6 +294,20 @@ export default function ReceivingEditor({
                     />
                   </div>
                 ))}
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-3">
+                    Expires
+                  </label>
+                  <input
+                    type="date"
+                    disabled={readonly}
+                    value={l.expires_on ?? ''}
+                    onFocus={() => (focused.current = `${l.id}:expires_on`)}
+                    onBlur={() => (focused.current = null)}
+                    onChange={(e) => saveField(l, 'expires_on', e.target.value || null)}
+                    className="w-full rounded-lg border border-line-2 bg-cream px-3 py-3 outline-none focus:border-brand disabled:opacity-60"
+                  />
+                </div>
                 <div className="col-span-2 sm:col-span-1">
                   <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-3">
                     Note

@@ -121,7 +121,12 @@ export default async function DashboardPage() {
       </div>
 
       <section className="rounded-2xl border border-line bg-surface p-5">
-        <h2 className="mb-3 font-bold">Recent inventory movements</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-bold">Recent inventory movements</h2>
+          <Link href="/removals" className="text-sm font-semibold text-sea hover:underline">
+            Removal log & sign-off →
+          </Link>
+        </div>
         {movements.data?.length ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

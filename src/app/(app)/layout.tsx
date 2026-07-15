@@ -11,13 +11,11 @@ const NAV = {
     { href: '/market-days', label: 'Market days' },
     { href: '/vendors', label: 'Vendors' },
     { href: '/charges', label: 'Charges' },
-    { href: '/removals', label: 'Removals' },
   ],
   staff: [
     { href: '/inventory', label: 'Inventory' },
     { href: '/receiving', label: 'Receiving' },
     { href: '/market-days', label: 'Market days' },
-    { href: '/removals', label: 'Removals' },
   ],
   vendor: [{ href: '/vendor', label: 'My portal' }],
 } as const
