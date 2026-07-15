@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic'
 
 async function updateVendor(formData: FormData) {
   'use server'
+  const { profile } = await getSessionProfile()
+  if (!profile || profile.role !== 'admin') throw new Error('Unauthorized')
   const supabase = await createClient()
   const id = formData.get('id') as string
   await supabase

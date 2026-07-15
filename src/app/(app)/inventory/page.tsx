@@ -17,6 +17,39 @@ export default function InventoryPage() {
   const [rows, setRows] = useState<Row[]>([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [countVal, setCountVal] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function saveCount(row: Row) {
+    const counted = Number(countVal)
+    if (!Number.isFinite(counted) || counted < 0) return
+    setSaving(true)
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    const delta = counted - row.on_hand
+    if (delta !== 0) {
+      const { error } = await supabase.from('inventory_movements').insert({
+        toast_guid: row.toast_guid,
+        delta,
+        reason: 'count_adjust',
+        note: `count: ${row.on_hand} → ${counted}`,
+        created_by: user?.id,
+      })
+      if (error) {
+        alert(error.message)
+        setSaving(false)
+        return
+      }
+      setRows((prev) =>
+        prev.map((r) => (r.toast_guid === row.toast_guid ? { ...r, on_hand: counted } : r))
+      )
+    }
+    setEditing(null)
+    setSaving(false)
+  }
 
   useEffect(() => {
     const supabase = createClient()
@@ -128,7 +161,50 @@ export default function InventoryPage() {
                 <td
                   className={`px-4 py-2.5 text-right font-bold ${r.on_hand <= 0 ? 'text-coral' : 'text-ink'}`}
                 >
-                  {r.on_hand}
+                  {editing === r.toast_guid ? (
+                    <span className="flex items-center justify-end gap-1.5">
+                      <input
+                        autoFocus
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={countVal}
+                        onChange={(e) => setCountVal(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveCount(r)
+                          if (e.key === 'Escape') setEditing(null)
+                        }}
+                        className="w-20 rounded-lg border border-brand bg-cream px-2 py-1.5 text-right font-bold outline-none"
+                      />
+                      <button
+                        onClick={() => saveCount(r)}
+                        disabled={saving}
+                        className="rounded-lg bg-pine px-2.5 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        onClick={() => setEditing(null)}
+                        className="rounded-lg bg-surface-3 px-2.5 py-1.5 text-xs font-bold text-ink-3"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setEditing(r.toast_guid)
+                        setCountVal(String(r.on_hand))
+                      }}
+                      title="Count / adjust this product"
+                      className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-brand-soft"
+                    >
+                      {r.on_hand}
+                      <span className="text-xs text-ink-3 opacity-60 group-hover:opacity-100">
+                        ✎
+                      </span>
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

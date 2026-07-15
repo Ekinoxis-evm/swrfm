@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic'
 
 async function setStatus(formData: FormData) {
   'use server'
+  const { profile } = await getSessionProfile()
+  if (!profile || profile.role !== 'admin') throw new Error('Unauthorized')
   const supabase = await createClient()
   const {
     data: { user },
@@ -24,6 +26,8 @@ async function setStatus(formData: FormData) {
 
 async function markPaid(formData: FormData) {
   'use server'
+  const { profile } = await getSessionProfile()
+  if (!profile || profile.role !== 'admin') throw new Error('Unauthorized')
   const supabase = await createClient()
   const {
     data: { user },
