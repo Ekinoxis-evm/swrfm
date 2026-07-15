@@ -78,12 +78,20 @@ export default function InventoryPage() {
             {loading ? 'Loading…' : `${rows.length} products · live levels update in real time`}
           </p>
         </div>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search product, category, vendor…"
-          className="w-full max-w-sm rounded-lg border border-line-2 bg-surface px-3 py-2.5 outline-none focus:border-brand"
-        />
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search product, category, vendor…"
+            className="w-full max-w-sm flex-1 rounded-lg border border-line-2 bg-surface px-3 py-2.5 outline-none focus:border-brand"
+          />
+          <a
+            href="/receiving/new"
+            className="whitespace-nowrap rounded-lg bg-pine px-4 py-2.5 text-sm font-bold text-white active:scale-[0.98]"
+          >
+            + Receive delivery
+          </a>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
