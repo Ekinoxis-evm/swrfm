@@ -35,7 +35,7 @@ export default async function DashboardPage() {
     { label: 'Active products', value: products.count ?? 0, tone: 'text-sea' },
     { label: 'Out of stock', value: outOfStock.count ?? 0, tone: 'text-coral' },
     { label: 'Open receivings', value: openSessions.data?.length ?? 0, tone: 'text-pine' },
-    { label: 'Charges to review', value: pendingCharges.data?.length ?? 0, tone: 'text-brand' },
+    { label: 'Payments to review', value: pendingCharges.data?.length ?? 0, tone: 'text-brand' },
   ]
 
   return (
@@ -92,7 +92,7 @@ export default async function DashboardPage() {
 
         <section className="rounded-2xl border border-line bg-surface p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-bold">Vendor charges pending review</h2>
+            <h2 className="font-bold">Vendor payments pending review</h2>
             <Link href="/charges" className="text-sm font-semibold text-sea hover:underline">
               Manage →
             </Link>

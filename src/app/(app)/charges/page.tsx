@@ -71,10 +71,10 @@ export default async function ChargesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold">Vendor charges</h1>
+        <h1 className="text-xl font-bold">Vendor payments</h1>
         <p className="text-sm text-ink-3">
-          Review each charge against the recorded delivery and its invoice document; attach the
-          payment proof when you pay — the vendor sees it instantly.
+          Accounts payable — review each charge against the recorded delivery and its invoice,
+          approve, and attach the payment proof when paid; the vendor sees it instantly.
         </p>
       </div>
 

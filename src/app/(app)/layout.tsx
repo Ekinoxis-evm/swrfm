@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getSessionProfile } from '@/lib/supabase/server'
 import SignOutButton from '@/components/sign-out-button'
+import NavLinks from '@/components/nav-links'
 
 const NAV = {
   admin: [
@@ -10,7 +11,7 @@ const NAV = {
     { href: '/receiving', label: 'Receiving' },
     { href: '/market-days', label: 'Market days' },
     { href: '/vendors', label: 'Vendors' },
-    { href: '/charges', label: 'Charges' },
+    { href: '/charges', label: 'Payments' },
   ],
   staff: [
     { href: '/inventory', label: 'Inventory' },
@@ -38,15 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             SWR <span className="text-brand">//</span> Inventory
           </Link>
           <nav className="hidden gap-1 sm:flex">
-            {NAV[profile.role].map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                className="rounded-lg px-3 py-1.5 text-sm font-semibold text-ink-2 hover:bg-surface-2"
-              >
-                {n.label}
-              </Link>
-            ))}
+            <NavLinks items={NAV[profile.role]} />
           </nav>
           <div className="ml-auto flex items-center gap-3">
             <span
@@ -61,15 +54,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2 sm:hidden">
-          {NAV[profile.role].map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              className="whitespace-nowrap rounded-lg bg-surface px-3 py-1.5 text-sm font-semibold text-ink-2"
-            >
-              {n.label}
-            </Link>
-          ))}
+          <NavLinks items={NAV[profile.role]} mobile />
         </nav>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>

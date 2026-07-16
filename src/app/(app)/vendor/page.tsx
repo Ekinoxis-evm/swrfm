@@ -192,7 +192,7 @@ export default async function VendorPortalPage() {
       </div>
 
       <section className="rounded-2xl border border-line bg-surface p-5">
-        <h2 className="mb-3 font-bold">My charges</h2>
+        <h2 className="mb-3 font-bold">My payments</h2>
         {chargeDocs.length ? (
           <ul className="divide-y divide-line">
             {chargeDocs.map((c) => (
