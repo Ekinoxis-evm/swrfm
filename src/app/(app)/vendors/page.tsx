@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getSessionProfile } from '@/lib/supabase/server'
+import VendorTabs from '@/components/vendor-tabs'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,13 +9,17 @@ export default async function VendorsPage() {
   const { supabase, profile } = await getSessionProfile()
   if (!profile || profile.role === 'vendor') redirect('/')
 
-  const [{ data: vendors }, { data: counts }] = await Promise.all([
+  const [{ data: vendors }, { data: counts }, pendingPayments] = await Promise.all([
     supabase
       .from('vendors')
       .select('id, name, contact_name, phone, contact_email, workflow_type')
       .eq('active', true)
       .order('name'),
     supabase.from('products').select('vendor_id').eq('active', true),
+    supabase
+      .from('vendor_charges')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['submitted', 'review']),
   ])
 
   const productCount = new Map<string, number>()
@@ -24,12 +29,15 @@ export default async function VendorsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold">Vendors</h1>
-        <p className="text-sm text-ink-3">
-          {vendors?.length ?? 0} active vendors — open a profile for products, deliveries, and
-          charges history.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Vendors</h1>
+          <p className="text-sm text-ink-3">
+            {vendors?.length ?? 0} active vendors — open a profile for products, deliveries, and
+            payments history.
+          </p>
+        </div>
+        <VendorTabs active="directory" pending={pendingPayments.count ?? 0} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {vendors?.map((v) => (

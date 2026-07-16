@@ -93,7 +93,7 @@ export default async function DashboardPage() {
         <section className="rounded-2xl border border-line bg-surface p-5">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-bold">Vendor payments pending review</h2>
-            <Link href="/charges" className="text-sm font-semibold text-sea hover:underline">
+            <Link href="/vendors/payments" className="text-sm font-semibold text-sea hover:underline">
               Manage →
             </Link>
           </div>

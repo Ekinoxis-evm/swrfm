@@ -11,7 +11,6 @@ const NAV = {
     { href: '/receiving', label: 'Receiving' },
     { href: '/market-days', label: 'Market days' },
     { href: '/vendors', label: 'Vendors' },
-    { href: '/charges', label: 'Payments' },
   ],
   staff: [
     { href: '/inventory', label: 'Inventory' },
