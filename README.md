@@ -11,6 +11,8 @@ One source of truth for inventory across every sales channel: the physical marke
 | ![Login](docs/screenshots/01-login.png) | ![Dashboard](docs/screenshots/02-dashboard.png) |
 | ![Inventory](docs/screenshots/03-inventory.png) | ![Product page](docs/screenshots/04-product-page.png) |
 | ![Receiving](docs/screenshots/05-receiving.png) | ![Market day](docs/screenshots/06-market-day.png) |
+| ![Vendor profile](docs/screenshots/12-vendor-profile.png) | ![Market day wizard](docs/screenshots/14-market-day-wizard.png) |
+| ![Payments](docs/screenshots/10-admin-payments.png) | ![Vendor portal](docs/screenshots/07-vendor-portal.png) |
 
 ## Stack
 
