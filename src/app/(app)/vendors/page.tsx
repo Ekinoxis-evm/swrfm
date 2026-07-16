@@ -39,23 +39,53 @@ export default async function VendorsPage() {
         </div>
         <VendorTabs active="directory" pending={pendingPayments.count ?? 0} />
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {vendors?.map((v) => (
-          <Link
-            key={v.id}
-            href={`/vendors/${v.id}`}
-            className="rounded-2xl border border-line bg-surface p-4 transition hover:border-line-2"
-          >
-            <div className="font-bold">{v.name}</div>
-            <div className="mt-1 text-xs text-ink-3">
-              {v.contact_name ?? 'No contact yet'}
-              {v.phone ? ` · ${v.phone}` : ''}
-            </div>
-            <div className="mt-2 text-xs font-semibold text-ink-2">
-              {productCount.get(v.id) ?? 0} products
-            </div>
-          </Link>
-        ))}
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line-2 bg-surface-2 text-left text-[11px] uppercase tracking-wide text-ink-3">
+              <th className="px-4 py-3">Vendor</th>
+              <th className="px-4 py-3">Contact</th>
+              <th className="px-4 py-3">Phone</th>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3 text-right">Products</th>
+              <th className="px-4 py-3">Receiving</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {vendors?.map((v) => (
+              <tr key={v.id} className="hover:bg-cream">
+                <td className="px-4 py-2.5">
+                  <Link
+                    href={`/vendors/${v.id}`}
+                    className="font-semibold hover:text-sea hover:underline"
+                  >
+                    {v.name}
+                  </Link>
+                </td>
+                <td className="px-4 py-2.5 text-ink-3">{v.contact_name ?? '—'}</td>
+                <td className="px-4 py-2.5 text-ink-3">{v.phone ?? '—'}</td>
+                <td className="px-4 py-2.5 text-ink-3">{v.contact_email ?? '—'}</td>
+                <td className="px-4 py-2.5 text-right font-semibold">
+                  {productCount.get(v.id) ?? 0}
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-bold uppercase text-ink-2">
+                    {v.workflow_type}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  <Link
+                    href={`/vendors/${v.id}`}
+                    className="rounded-lg bg-sea-soft px-3 py-1.5 text-xs font-bold text-sea"
+                  >
+                    Profile →
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
