@@ -72,6 +72,7 @@ export default async function RemovalsPage() {
       .select('toast_guid, name')
       .eq('cooler_relevant', true)
       .eq('active', true)
+      .is('archived_at', null)
       .order('name')
       .limit(500),
     supabase

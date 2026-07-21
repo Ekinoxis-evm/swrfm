@@ -20,6 +20,7 @@ export default async function NewMarketDayPage() {
       .from('products')
       .select('toast_guid, name, category')
       .eq('active', true)
+      .is('archived_at', null)
       .order('name')
       .limit(2000),
     supabase.from('inventory_levels').select('toast_guid, on_hand'),
