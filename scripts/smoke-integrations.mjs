@@ -55,19 +55,33 @@ try {
   if (!domain.endsWith('.myshopify.com')) {
     console.log(`  ⚠️  SHOPIFY_STORE_DOMAIN no termina en .myshopify.com — la Admin API requiere el dominio *.myshopify.com de la tienda`);
   }
+  // Auth: client-credentials grant (app instalada) — token de 24 h minteado al vuelo.
+  let token = env.SHOPIFY_ADMIN_ACCESS_TOKEN;
+  if (env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET) {
+    const cc = await fetch(`https://${domain}/admin/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: env.SHOPIFY_CLIENT_ID,
+        client_secret: env.SHOPIFY_CLIENT_SECRET,
+        grant_type: 'client_credentials',
+      }),
+    });
+    if (cc.ok) {
+      token = (await cc.json()).access_token;
+      ok('client-credentials grant', 'token de 24 h emitido');
+    } else bad(`client-credentials grant: HTTP ${cc.status}`, (await cc.text()).slice(0, 100));
+  }
   const res = await fetch(`https://${domain}/admin/api/${env.SHOPIFY_API_VERSION || '2026-01'}/graphql.json`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': env.SHOPIFY_ADMIN_ACCESS_TOKEN,
-    },
-    body: JSON.stringify({ query: '{ shop { name currencyCode } }' }),
+    headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
+    body: JSON.stringify({ query: '{ shop { name currencyCode } productsCount { count } }' }),
   });
   if (!res.ok) {
     bad(`graphql: HTTP ${res.status}`, (await res.text()).slice(0, 120));
   } else {
     const j = await res.json();
-    if (j.data?.shop) ok('shop query', `${j.data.shop.name} (${j.data.shop.currencyCode})`);
+    if (j.data?.shop) ok('shop query', `${j.data.shop.name} (${j.data.shop.currencyCode}) · ${j.data.productsCount?.count ?? '?'} productos`);
     else bad('shop query', JSON.stringify(j.errors ?? j).slice(0, 160));
   }
 } catch (e) {
