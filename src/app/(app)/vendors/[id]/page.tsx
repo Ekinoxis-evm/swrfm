@@ -45,6 +45,7 @@ export default async function VendorProfilePage({
         .select('toast_guid, name, category, price_cents')
         .eq('vendor_id', id)
         .eq('active', true)
+        .is('archived_at', null)
         .order('name'),
       supabase
         .from('receiving_sessions')

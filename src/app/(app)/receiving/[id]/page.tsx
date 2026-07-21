@@ -31,6 +31,7 @@ export default async function ReceivingDetailPage({
     .select('toast_guid, name, category')
     .eq('vendor_id', vendor.id)
     .eq('active', true)
+    .is('archived_at', null)
     .order('name')
 
   return (

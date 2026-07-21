@@ -10,7 +10,11 @@ export default async function DashboardPage() {
   if (profile.role !== 'admin') redirect('/')
 
   const [products, outOfStock, openSessions, pendingCharges, movements] = await Promise.all([
-    supabase.from('products').select('toast_guid', { count: 'exact', head: true }).eq('active', true),
+    supabase
+      .from('products')
+      .select('toast_guid', { count: 'exact', head: true })
+      .eq('active', true)
+      .is('archived_at', null),
     supabase.from('inventory_levels').select('toast_guid', { count: 'exact', head: true }).lte('on_hand', 0),
     supabase
       .from('receiving_sessions')

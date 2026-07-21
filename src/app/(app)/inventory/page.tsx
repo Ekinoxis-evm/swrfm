@@ -54,6 +54,7 @@ export default function InventoryPage() {
           .from('products')
           .select('toast_guid, name, category, vendor_name, price_cents, shopify_handle')
           .eq('active', true)
+          .is('archived_at', null)
           .order('name')
           .limit(2000),
         supabase.from('inventory_levels').select('toast_guid, on_hand'),
@@ -177,12 +178,12 @@ export default function InventoryPage() {
             placeholder="Search product, category, vendor…"
             className="w-full max-w-sm flex-1 rounded-lg border border-line-2 bg-surface px-3 py-2.5 outline-none focus:border-brand"
           />
-          <a
+          <Link
             href="/receiving/new"
             className="whitespace-nowrap rounded-lg bg-pine px-4 py-2.5 text-sm font-bold text-white active:scale-[0.98]"
           >
             + Receive delivery
-          </a>
+          </Link>
         </div>
       </div>
 

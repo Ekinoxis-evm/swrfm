@@ -15,7 +15,7 @@ export default async function VendorsPage() {
       .select('id, name, contact_name, phone, contact_email, workflow_type')
       .eq('active', true)
       .order('name'),
-    supabase.from('products').select('vendor_id').eq('active', true),
+    supabase.from('products').select('vendor_id').eq('active', true).is('archived_at', null),
     supabase
       .from('vendor_charges')
       .select('id', { count: 'exact', head: true })
