@@ -11,6 +11,7 @@ const NAV = {
     { href: '/receiving', label: 'Receiving' },
     { href: '/market-days', label: 'Market days' },
     { href: '/vendors', label: 'Vendors' },
+    { href: '/users', label: 'Users' },
   ],
   staff: [
     { href: '/inventory', label: 'Inventory' },
@@ -35,7 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <header className="sticky top-0 z-50 border-b-2 border-line-2 bg-surface-3/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
           <Link href="/" className="text-base font-bold tracking-tight">
-            SWR <span className="text-brand">//</span> Inventory
+            SWR <span className="text-brand">{'//'}</span> Inventory
           </Link>
           <nav className="hidden gap-1 sm:flex">
             <NavLinks items={NAV[profile.role]} />
@@ -46,9 +47,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             >
               {profile.role}
             </span>
-            <span className="hidden text-sm font-semibold text-ink-2 md:block">
+            <Link
+              href="/account"
+              title="Account — change password"
+              className="hidden text-sm font-semibold text-ink-2 hover:underline md:block"
+            >
               {profile.full_name}
-            </span>
+            </Link>
+            <Link
+              href="/account"
+              className="rounded-lg border border-line-2 bg-surface-2 px-3 py-1.5 text-xs font-bold text-ink-3 hover:bg-surface"
+            >
+              Account
+            </Link>
             <SignOutButton />
           </div>
         </div>
