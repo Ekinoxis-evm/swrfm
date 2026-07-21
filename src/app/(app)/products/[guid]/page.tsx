@@ -1,8 +1,52 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getSessionProfile } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
+import { createClient, getSessionProfile } from '@/lib/supabase/server'
+import ProductEdit from './product-edit'
 
 export const dynamic = 'force-dynamic'
+
+async function updateProduct(formData: FormData) {
+  'use server'
+  const { profile } = await getSessionProfile()
+  if (!profile || profile.role !== 'admin') throw new Error('Unauthorized')
+  const supabase = await createClient()
+  const guid = formData.get('toast_guid') as string
+  const vendorId = (formData.get('vendor_id') as string) || null
+  // vendor_name is denormalized on products — keep it in sync with the pick.
+  let vendorName: string | null = null
+  if (vendorId) {
+    const { data: vendor } = await supabase.from('vendors').select('name').eq('id', vendorId).single()
+    vendorName = vendor?.name ?? null
+  }
+  await supabase
+    .from('products')
+    .update({
+      category: ((formData.get('category') as string) || '').trim() || null,
+      barcode: ((formData.get('barcode') as string) || '').trim() || null,
+      vendor_id: vendorId,
+      vendor_name: vendorName,
+      cooler_relevant: formData.get('cooler_relevant') === 'on',
+    })
+    .eq('toast_guid', guid)
+  revalidatePath(`/products/${guid}`)
+}
+
+async function setArchived(formData: FormData) {
+  'use server'
+  const { profile } = await getSessionProfile()
+  if (!profile || profile.role !== 'admin') throw new Error('Unauthorized')
+  const supabase = await createClient()
+  const guid = formData.get('toast_guid') as string
+  const archive = formData.get('archive') === '1'
+  await supabase
+    .from('products')
+    .update({ archived_at: archive ? new Date().toISOString() : null })
+    .eq('toast_guid', guid)
+  revalidatePath(`/products/${guid}`)
+  revalidatePath('/inventory')
+  revalidatePath('/dashboard')
+}
 
 const REASON_LABEL: Record<string, string> = {
   receiving: '📦 Received',
@@ -23,11 +67,15 @@ export default async function ProductPage({ params }: { params: Promise<{ guid: 
   const { supabase, profile } = await getSessionProfile()
   if (!profile || profile.role === 'vendor') redirect('/')
 
+  // NOTE: deliberately NOT filtered by archived_at — an archived product's
+  // detail page must stay reachable so its history remains auditable.
   const [{ data: product }, { data: level }, { data: entries }, { data: movements }] =
     await Promise.all([
       supabase
         .from('products')
-        .select('toast_guid, name, category, vendor_name, vendor_id, price_cents, barcode, shopify_handle')
+        .select(
+          'toast_guid, name, category, vendor_name, vendor_id, price_cents, barcode, shopify_handle, cooler_relevant, archived_at'
+        )
         .eq('toast_guid', guid)
         .single(),
       supabase.from('inventory_levels').select('on_hand, updated_at').eq('toast_guid', guid).maybeSingle(),
@@ -45,6 +93,11 @@ export default async function ProductPage({ params }: { params: Promise<{ guid: 
         .limit(50),
     ])
   if (!product) notFound()
+
+  const isAdmin = profile.role === 'admin'
+  const { data: vendors } = isAdmin
+    ? await supabase.from('vendors').select('id, name').eq('active', true).order('name')
+    : { data: null }
 
   const onHand = Number(level?.on_hand ?? 0)
   const totals = { in: 0, out: 0, sold: 0 }
@@ -69,7 +122,14 @@ export default async function ProductPage({ params }: { params: Promise<{ guid: 
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">{product.name}</h1>
+          <h1 className="flex flex-wrap items-center gap-2 text-xl font-bold">
+            {product.name}
+            {product.archived_at && (
+              <span className="rounded-full bg-surface-3 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-ink-3">
+                Archived
+              </span>
+            )}
+          </h1>
           <p className="text-sm text-ink-3">
             {product.category ?? '—'} ·{' '}
             {product.vendor_id ? (
@@ -96,6 +156,24 @@ export default async function ProductPage({ params }: { params: Promise<{ guid: 
           ← Inventory
         </Link>
       </div>
+
+      {isAdmin && (
+        <ProductEdit
+          product={{
+            toast_guid: product.toast_guid,
+            name: product.name,
+            category: product.category,
+            barcode: product.barcode,
+            vendor_id: product.vendor_id,
+            price_cents: product.price_cents,
+            cooler_relevant: Boolean(product.cooler_relevant),
+            archived_at: product.archived_at,
+          }}
+          vendors={vendors ?? []}
+          updateProduct={updateProduct}
+          setArchived={setArchived}
+        />
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
