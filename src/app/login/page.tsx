@@ -4,15 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-const DEMO_ACCOUNTS = [
-  { label: 'Admin — Ruben', email: 'admin.ruben@demo.swrfm.app', tone: 'bg-brand text-white' },
-  { label: 'Admin — Keiry', email: 'admin.keiry@demo.swrfm.app', tone: 'bg-brand text-white' },
-  { label: 'Staff — Sergio', email: 'staff.sergio@demo.swrfm.app', tone: 'bg-pine text-white' },
-  { label: 'Vendor — Florida Fresh', email: 'vendor.ffm@demo.swrfm.app', tone: 'bg-sea text-white' },
-]
-
-const DEMO_PASSWORD = 'SwrDemo2026!'
-
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -20,13 +11,33 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  async function signIn(e: string, p: string) {
+  async function signIn(e: React.FormEvent) {
+    e.preventDefault()
     setBusy(true)
     setError(null)
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email: e, password: p })
-    if (error) {
-      setError(error.message)
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
+    if (authError) {
+      setError(
+        authError.message === 'Invalid login credentials'
+          ? 'Invalid email or password'
+          : authError.message
+      )
+      setBusy(false)
+      return
+    }
+    // Block deactivated accounts before they reach the app.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('active')
+      .eq('id', data.user.id)
+      .single()
+    if (profile && profile.active === false) {
+      await supabase.auth.signOut()
+      setError('Your account is inactive — contact an administrator')
       setBusy(false)
       return
     }
@@ -39,24 +50,19 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="text-2xl font-bold tracking-tight">
-            SWR <span className="text-brand">//</span> Inventory
+            SWR <span className="text-brand">{'//'}</span> Cooler System
           </div>
           <div className="mt-1 text-sm text-ink-3">Southwest Ranches Farmers Market</div>
         </div>
 
-        <form
-          className="rounded-2xl border border-line bg-surface p-6 shadow-sm"
-          onSubmit={(e) => {
-            e.preventDefault()
-            signIn(email, password)
-          }}
-        >
+        <form className="rounded-2xl border border-line bg-surface p-6 shadow-sm" onSubmit={signIn}>
           <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-ink-3">
             Email
           </label>
           <input
             type="email"
             required
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="mb-4 w-full rounded-lg border border-line-2 bg-cream px-3 py-2.5 outline-none focus:border-brand"
@@ -68,6 +74,7 @@ export default function LoginPage() {
           <input
             type="password"
             required
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="mb-5 w-full rounded-lg border border-line-2 bg-cream px-3 py-2.5 outline-none focus:border-brand"
@@ -83,23 +90,9 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 rounded-2xl border border-dashed border-line-2 p-4">
-          <p className="mb-3 text-center text-xs font-bold uppercase tracking-wide text-ink-3">
-            Demo accounts — one tap
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {DEMO_ACCOUNTS.map((a) => (
-              <button
-                key={a.email}
-                disabled={busy}
-                onClick={() => signIn(a.email, DEMO_PASSWORD)}
-                className={`rounded-lg px-3 py-2.5 text-xs font-bold transition active:scale-[0.97] disabled:opacity-50 ${a.tone}`}
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <p className="mt-6 text-center text-xs text-ink-3">
+          Access is by invitation only. Contact an administrator if you need an account.
+        </p>
       </div>
     </main>
   )
