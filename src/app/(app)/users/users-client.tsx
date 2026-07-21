@@ -10,6 +10,7 @@ export type UserRow = {
   role: Role
   vendor_id: string | null
   active: boolean
+  is_master: boolean
   email: string | null
   created_at: string | null
 }
@@ -26,6 +27,8 @@ export default function UsersClient({
   rows,
   vendors,
   meId,
+  meIsMaster,
+  masterColumnMissing,
   adminApiError,
   createUser,
   updateUser,
@@ -33,16 +36,19 @@ export default function UsersClient({
   rows: UserRow[]
   vendors: Vendor[]
   meId: string
+  meIsMaster: boolean
+  masterColumnMissing: boolean
   adminApiError: string | null
   createUser: (input: {
     fullName: string
     email: string
     role: Role
     vendorId: string | null
+    isMaster?: boolean
   }) => Promise<{ error?: string; tempPassword?: string }>
   updateUser: (
     id: string,
-    patch: { role?: Role; vendor_id?: string | null; active?: boolean }
+    patch: { role?: Role; vendor_id?: string | null; active?: boolean; is_master?: boolean }
   ) => Promise<{ error?: string }>
 }) {
   const [pending, startTransition] = useTransition()
@@ -55,11 +61,15 @@ export default function UsersClient({
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Role>('staff')
   const [vendorId, setVendorId] = useState('')
+  const [master, setMaster] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [created, setCreated] = useState<{ email: string; tempPassword: string } | null>(null)
   const [copied, setCopied] = useState(false)
 
-  function applyUpdate(id: string, patch: { role?: Role; vendor_id?: string | null; active?: boolean }) {
+  function applyUpdate(
+    id: string,
+    patch: { role?: Role; vendor_id?: string | null; active?: boolean; is_master?: boolean }
+  ) {
     setRowError(null)
     startTransition(async () => {
       const res = await updateUser(id, patch)
@@ -76,6 +86,7 @@ export default function UsersClient({
         email,
         role,
         vendorId: role === 'vendor' ? vendorId || null : null,
+        isMaster: meIsMaster && role === 'admin' && master,
       })
       if (res.error) {
         setFormError(res.error)
@@ -87,6 +98,7 @@ export default function UsersClient({
       setEmail('')
       setRole('staff')
       setVendorId('')
+      setMaster(false)
     })
   }
 
@@ -102,6 +114,13 @@ export default function UsersClient({
       {adminApiError && (
         <div className="rounded-2xl border border-coral/40 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">
           {adminApiError} — emails and new accounts are unavailable until it is set.
+        </div>
+      )}
+
+      {masterColumnMissing && (
+        <div className="rounded-2xl border border-line-2 bg-surface-2 px-4 py-3 text-sm font-semibold text-ink-2">
+          Run migration 20260722_profiles_is_master.sql to enable master admins. Until then,
+          admin accounts cannot be managed from here.
         </div>
       )}
 
@@ -182,13 +201,26 @@ export default function UsersClient({
               </label>
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value as Role)}
+                onChange={(e) => {
+                  setRole(e.target.value as Role)
+                  if (e.target.value !== 'admin') setMaster(false)
+                }}
                 className="w-full rounded-lg border border-line-2 bg-cream px-3 py-2.5 outline-none focus:border-brand"
               >
-                <option value="admin">Admin</option>
+                {meIsMaster && <option value="admin">Admin</option>}
                 <option value="staff">Staff</option>
                 <option value="vendor">Vendor</option>
               </select>
+              {meIsMaster && role === 'admin' && (
+                <label className="mt-2 flex items-center gap-2 text-sm font-semibold text-ink-2">
+                  <input
+                    type="checkbox"
+                    checked={master}
+                    onChange={(e) => setMaster(e.target.checked)}
+                  />
+                  Master admin — can manage other admin accounts
+                </label>
+              )}
             </div>
             {role === 'vendor' && (
               <div>
@@ -237,6 +269,11 @@ export default function UsersClient({
           <tbody className="divide-y divide-line">
             {rows.map((u) => {
               const isMe = u.id === meId
+              // Non-masters cannot touch admin/master rows.
+              const locked = isMe || (!meIsMaster && u.role === 'admin')
+              const lockTitle = isMe
+                ? 'You cannot change your own account'
+                : 'Only a master admin can manage admin accounts'
               return (
                 <tr key={u.id} className="hover:bg-cream">
                   <td className="px-4 py-2.5 font-semibold">
@@ -251,10 +288,15 @@ export default function UsersClient({
                       >
                         {u.role}
                       </span>
+                      {u.is_master && (
+                        <span className="rounded-full bg-ink px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-cream">
+                          Master
+                        </span>
+                      )}
                       <select
                         value={pickingVendorFor === u.id ? 'vendor' : u.role}
-                        disabled={isMe || pending}
-                        title={isMe ? 'You cannot change your own role' : 'Change role'}
+                        disabled={locked || pending}
+                        title={locked ? lockTitle : 'Change role'}
                         onChange={(e) => {
                           const next = e.target.value as Role
                           if (next === u.role) return
@@ -267,7 +309,7 @@ export default function UsersClient({
                         }}
                         className="rounded-lg border border-line-2 bg-surface-2 px-2 py-1 text-xs font-semibold disabled:opacity-40"
                       >
-                        <option value="admin">Admin</option>
+                        {(meIsMaster || u.role === 'admin') && <option value="admin">Admin</option>}
                         <option value="staff">Staff</option>
                         <option value="vendor">Vendor</option>
                       </select>
@@ -304,16 +346,27 @@ export default function UsersClient({
                   </td>
                   <td className="px-4 py-2.5 text-ink-3">{u.created_at ?? '—'}</td>
                   <td className="px-4 py-2.5 text-right">
-                    <button
-                      disabled={isMe || pending}
-                      title={isMe ? 'You cannot deactivate your own account' : undefined}
-                      onClick={() => applyUpdate(u.id, { active: !u.active })}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition active:scale-[0.97] disabled:opacity-40 ${
-                        u.active ? 'bg-surface-2 text-ink-3' : 'bg-pine-soft text-pine'
-                      }`}
-                    >
-                      {u.active ? 'Deactivate' : 'Activate'}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      {meIsMaster && u.role === 'admin' && !isMe && (
+                        <button
+                          disabled={pending}
+                          onClick={() => applyUpdate(u.id, { is_master: !u.is_master })}
+                          className="rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-bold text-brand transition active:scale-[0.97] disabled:opacity-40"
+                        >
+                          {u.is_master ? 'Remove master' : 'Make master'}
+                        </button>
+                      )}
+                      <button
+                        disabled={locked || pending}
+                        title={locked ? lockTitle : undefined}
+                        onClick={() => applyUpdate(u.id, { active: !u.active })}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-bold transition active:scale-[0.97] disabled:opacity-40 ${
+                          u.active ? 'bg-surface-2 text-ink-3' : 'bg-pine-soft text-pine'
+                        }`}
+                      >
+                        {u.active ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )
