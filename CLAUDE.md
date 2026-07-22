@@ -1,28 +1,65 @@
 # SWRFM — Sistema Inteligente de Inventario
 
-App de inventario maestro para Southwest Ranches Farmers Market. Next.js (App Router) + Supabase (Postgres, Auth con roles admin/staff/vendor, Realtime, Storage). Demo: https://swrfm-demo.vercel.app
+## Qué es este proyecto
 
-## Cómo trabajar en este repo (léelo antes de cambiar nada)
+Inventario maestro para **Southwest Ranches Farmers Market**: una sola fuente de verdad para el catálogo y las existencias a través de los 3 canales de venta (mercado físico en Toast POS, tienda Shopify y pop-ups). Next.js (App Router) + Supabase (Postgres, Auth, RLS, Realtime, Storage), desplegado en Vercel (`ekinoxis-team/swrfm-demo`). Demo: https://swrfm-demo.vercel.app
 
-Este repo lo mantiene **Ekinoxis** (William). **Ruben (SWRFM)** propone cambios y mejoras desde su copia local, normalmente con Claude Code. Para que ninguna propuesta se pierda y todas queden registradas, validadas e implementadas, el flujo es SIEMPRE por Pull Request:
+### Mapa de arquitectura
 
-1. **Actualiza tu copia:** `git checkout main && git pull`
-2. **Crea una rama de propuesta:** `git checkout -b propuesta/<tema-corto>` (ej.: `propuesta/boton-reimprimir-recibo`)
-3. **Haz los cambios en la rama** (código, textos, documentos — lo que sea).
-4. **Abre un Pull Request** hacia `main` usando la plantilla (se carga sola al abrir el PR). Describe qué propones y por qué, en español, con capturas si es algo visual.
-5. **Ekinoxis revisa el PR**, comenta, y lo valida/implementa. Al quedar implementado se registra en el 📝 Changelog de Notion.
+```
+Toast POS (Menus V2, OAuth client-credentials)  ─┐
+Shopify Admin GraphQL (client-credentials, 24h) ─┤→ scripts/ sync → Supabase ← app Next.js (Vercel)
+                                                 │        (products, ledger)      │
+                              catálogo v12 Ruben ┘                                └ Realtime → edición colaborativa
+```
 
-### Reglas para Claude Code en este repo
+- **Rutas** (`src/app/(app)/`): `dashboard`, `inventory`, `products`, `receiving`, `removals`, `market-days`, `vendors` (+ `payments`), `vendor` (portal del proveedor), `charges`, `users`, `account`. Login OTP sin contraseña por defecto en `src/app/login/`.
+- **Roles**: `admin` / `staff` / `vendor` en `profiles.role`, más el tier `is_master` (admin que además gestiona cuentas admin). Los permisos viven en RLS de Postgres, no en el cliente.
+- **Datos**: `products` (llave `toast_guid`, borrado suave con `archived_at`); el inventario es un **ledger** (`inventory_movements` + `inventory_levels` por trigger). Detalle completo: `.claude/rules/arquitectura.md`.
 
-- **NUNCA hagas commit ni push directamente a `main`.** Todo cambio va en una rama `propuesta/*` y entra por PR.
-- **No modifiques**: migraciones de base de datos (`supabase/`), archivos `.env*`, secretos, configuración de despliegue (`.vercel/`), ni `package-lock.json` (salvo que la propuesta lo requiera y se explique en el PR).
-- **No despliegues** ni ejecutes acciones contra producción/Supabase — las propuestas se validan primero.
-- **Propuestas grandes** (una funcionalidad nueva, un cambio de flujo): antes de escribir código, crea un documento en `proposals/` copiando `proposals/TEMPLATE.md` → `proposals/AAAA-MM-DD-<tema>.md`, y ábrelo como PR. Se discute ahí y luego se implementa.
-- Escribe descripciones de commits y PRs **en español**, claras y cortas.
-- Si la propuesta toca la interfaz, incluye capturas de pantalla en el PR.
+## Cómo trabajar aquí
 
-### Después del PR
+### Verificación (NUNCA `npm run build` local — es prohibitivamente lento)
 
-Ekinoxis responde cada PR antes del viernes de esa semana (día de demo y triage). Lo aceptado se prioriza en el sync del lunes, se implementa dentro del plan de horas, y queda en el 📝 Changelog. Nada se descarta sin explicar por qué.
+```bash
+npx tsc --noEmit          # chequeo de tipos
+npx eslint <archivos>     # lint de lo que tocaste
+```
 
-Ideas y feedback que no son código van por el formulario: 📬 SWRFM — Feedback e Ideas (en Notion).
+El build real lo verifica el **preview de Vercel** al abrir el PR. No despliegues ni ejecutes acciones contra producción/Supabase sin validación previa.
+
+### Scripts (patrón: cero dependencias — fetch nativo + parseo de `.env.local`)
+
+| Script | Qué hace |
+|---|---|
+| `node scripts/smoke-integrations.mjs` | Smoke test solo-lectura de credenciales Toast + Shopify (no imprime secretos) |
+| `node scripts/sync-toast-catalog.mjs <links.json> [--apply]` | Sync catálogo Toast → informe de conciliación; solo escribe con `--apply` |
+| `node scripts/bootstrap-masters.mjs` | Crea/asegura las cuentas master admin (idempotente, service key) |
+| `node scripts/seed-catalog.mjs <catalog.json>` | Semilla del catálogo desde un export de Toast (fuera del repo) |
+
+### Variables de entorno
+
+Todas documentadas en `.env.example`. Copia a `.env.local` (gitignored) y llena. **Los archivos `.env*` no se editan desde Claude** (hook lo bloquea) ni se comitean jamás.
+
+### Migraciones
+
+SQL en `supabase/migrations/` (una por cambio, prefijo fecha `AAAAMMDD_`). Se aplican vía Supabase MCP o SQL Editor — nunca automáticamente desde el repo. Antes de tocar esquema/RLS, consulta `.claude/rules/arquitectura.md` (o usa el agente `revisor-db`).
+
+### Convenciones (detalle en `.claude/rules/convenciones.md`)
+
+- **UI**: las listas son tablas; acciones inline en la fila; creación vía wizards; interfaz en inglés.
+- **Scripts**: cero dependencias npm — fetch nativo, parseo propio de `.env.local`.
+- **Commits en español**, cortos y claros, con trailer `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
+- **Changelog**: toda entrega relevante se registra como fila en el 📝 Changelog de Notion.
+- **Secretos**: nunca en código, git, Notion ni chat — solo `.env.local` y Vercel env vars.
+
+## Flujo de contribución (detalle completo en `.claude/rules/contribucion.md`)
+
+Repo mantenido por **Ekinoxis** (William); **Ruben (SWRFM)** propone mejoras. `main` está protegida:
+
+1. `git checkout main && git pull` → rama `propuesta/<tema-corto>`.
+2. Cambios en la rama; **nunca commit/push directo a `main`**.
+3. PR hacia `main` con la plantilla (en español, con capturas si toca UI).
+4. Ekinoxis revisa antes del viernes (demo y triage); lo implementado va al 📝 Changelog.
+
+No modifiques desde una propuesta: `supabase/` (migraciones), `.env*`, secretos, `.vercel/`, ni `package-lock.json` sin justificarlo en el PR. Propuestas grandes: primero un documento en `proposals/` (copiando `proposals/TEMPLATE.md`).
