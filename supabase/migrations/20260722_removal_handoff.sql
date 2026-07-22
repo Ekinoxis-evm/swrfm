@@ -136,6 +136,12 @@ update public.removals
    set local_date = (created_at at time zone 'America/New_York')::date
  where local_date is distinct from (created_at at time zone 'America/New_York')::date;
 
+-- Filas firmadas antes de que existiera `signed_at`: sin esto el reporte nocturno,
+-- que se guía por `signed_at`, las contaría como pendientes de firma.
+update public.removals
+   set signed_at = created_at
+ where signed_by is not null and signed_at is null;
+
 -- ---------------------------------------------------------------------------
 -- 4. Operaciones atómicas (reemplazan los endpoints §3 del server.js legado)
 -- ---------------------------------------------------------------------------

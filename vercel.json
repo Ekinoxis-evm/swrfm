@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/removal-report",
+      "schedule": "55 3 * * *"
+    }
+  ]
+}

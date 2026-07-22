@@ -22,7 +22,7 @@ en el cliente.
 | `GET /removal/list?date=` | `select … where local_date = …` | Vía PostgREST, con RLS. |
 | `POST /save` · `GET /load` | — | No aplica: el blob JSON se reemplaza por tablas reales. |
 | `GET /ws` | Supabase Realtime sobre `removals` | Más un *poll* de 60 s de red de seguridad, igual que el legado. |
-| `POST /send-email` | *(no portado)* | Ver "Pendiente". |
+| `POST /send-email` | Cron `/api/cron/removal-report` | Reporte nocturno vía Resend. Ver abajo. |
 
 ## Modelo de datos (§4)
 
@@ -77,6 +77,31 @@ del resto se decide con Ruben.
 | 4. `/save` acepta clave/valor arbitrarios | **Resuelto** — ese almacén ya no existe. |
 | 5. Ediciones de listas locales al dispositivo | **Resuelto** (ver §4c). |
 
+## Reporte nocturno por correo
+
+El legado mandaba el resumen del día a las 11:55 PM desde el Mac Mini con Nodemailer +
+Gmail. Aquí es un **Vercel Cron** que llama a `/api/cron/removal-report` y envía con
+**Resend** desde `hola@ekinoxis.xyz` (dominio verificado).
+
+- **Horario:** `55 3 * * *` UTC (`vercel.json`). En horario de verano son las 11:55 PM de
+  Florida, igual que el legado; en invierno, las 10:55 PM. Vercel solo programa en UTC, y en
+  ambos casos cae después del cierre y dentro del mismo día operativo.
+- **Sin duplicados y con recuperación tardía:** `removal_report_log` registra la fecha
+  **solo** si Resend aceptó el mensaje. Cada pasada envía el día de hoy y, si el de ayer
+  nunca salió, lo recupera marcado como `[LATE — auto-recovered]`. Es la misma garantía que
+  el legado añadió el 7 de julio de 2026 tras perder reportes por caídas del Mac Mini.
+- **Reenvío manual:** `GET /api/cron/removal-report?date=YYYY-MM-DD` con el mismo bearer.
+  Ignora el registro a propósito — se pide explícitamente.
+- **Autenticación:** `Authorization: Bearer $CRON_SECRET`, que es como Vercel invoca sus
+  crons. `/api/cron/*` está exento del middleware de sesión (si no, lo redirigía al login).
+
+Variables (ver `.env.example`): `RESEND_API_KEY`, `REMOVAL_REPORT_FROM`,
+`REMOVAL_REPORT_TO` (coma-separado; **vacío = no envía nada**), `CRON_SECRET`.
+
+Probado de extremo a extremo contra el endpoint real: sin bearer → 401 · reenvío del
+2026-07-15 → entregado por Resend a los dos destinatarios · pasada automática → envía hoy y
+recupera ayer · segunda pasada → `already_sent`, sin duplicar.
+
 ## Pendiente — decisiones y trabajo que no entra aquí
 
 1. **`units_per_case` está vacío en los 924 productos.** Es el bloqueo real para operar
@@ -91,10 +116,9 @@ del resto se decide con Ruben.
      `swr_data.json` **de producción** (Mac Mini), que no está en este snapshot.
 2. **Cola offline** (`rl_sync_queue` del legado): no portada. Depende de la pregunta 4 de
    `proposals/2026-07-22-traslado-a-piso.md` — si el cooler tiene señal, no hace falta.
-3. **Reporte nocturno por email**: no portado. Encaja como Edge Function programada.
-4. **Alerta de stock bajo**: `low_stock_cases` ya existe y es editable, pero ninguna
+3. **Alerta de stock bajo**: `low_stock_cases` ya existe y es editable, pero ninguna
    pantalla la usa todavía.
-5. **Migración del histórico** del `swr.db` legado: fase 2, opcional (§7 del handoff).
+4. **Migración del histórico** del `swr.db` legado: fase 2, opcional (§7 del handoff).
 
 ## Relación con la propuesta de "traslado a piso"
 

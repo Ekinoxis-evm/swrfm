@@ -28,7 +28,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
-  const isPublic = pathname === '/login' || pathname.startsWith('/auth')
+  // `/api/cron/*` no usa sesión de navegador: se autentica con CRON_SECRET en su propio
+  // handler. Sin esta excepción el middleware lo redirige al login y el cron nunca corre.
+  const isPublic =
+    pathname === '/login' || pathname.startsWith('/auth') || pathname.startsWith('/api/cron')
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone()
