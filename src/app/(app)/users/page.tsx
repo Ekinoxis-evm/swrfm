@@ -3,6 +3,9 @@ import { revalidatePath } from 'next/cache'
 import { getSessionProfile } from '@/lib/supabase/server'
 import { adminConfigured, createAuthUser, listAuthUsers, SERVICE_KEY_MISSING } from '@/lib/supabase/admin'
 import UsersClient, { type UserRow } from './users-client'
+import ReportRecipients from './report-recipients'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export const dynamic = 'force-dynamic'
 
@@ -136,6 +139,34 @@ export default async function UsersPage() {
     return {}
   }
 
+  async function addRecipient(email: string): Promise<{ error?: string }> {
+    'use server'
+    const { supabase, admin } = await requireAdmin()
+    if (!admin?.is_master) return { error: 'Only a master admin can manage recipients' }
+    const clean = email.trim().toLowerCase()
+    if (!EMAIL_RE.test(clean)) return { error: 'Enter a valid email address' }
+    // RLS (is_master) es la barrera real; el chequeo de arriba solo da mejor mensaje.
+    const { error } = await supabase
+      .from('removal_report_recipients')
+      .upsert({ email: clean, added_by: admin.id })
+    if (error) return { error: error.message }
+    revalidatePath('/users')
+    return {}
+  }
+
+  async function removeRecipient(email: string): Promise<{ error?: string }> {
+    'use server'
+    const { supabase, admin } = await requireAdmin()
+    if (!admin?.is_master) return { error: 'Only a master admin can manage recipients' }
+    const { error } = await supabase
+      .from('removal_report_recipients')
+      .delete()
+      .eq('email', email.trim().toLowerCase())
+    if (error) return { error: error.message }
+    revalidatePath('/users')
+    return {}
+  }
+
   // Tolerate the is_master column not existing yet: fall back to a select
   // without it and treat everyone as non-master.
   let masterColumnMissing = false
@@ -170,6 +201,16 @@ export default async function UsersPage() {
   const meIsMaster =
     !masterColumnMissing && Boolean(rows.find((r) => r.id === profile.id)?.is_master)
 
+  // La lista de destinatarios solo la ve/edita el master (la RLS lo respalda).
+  let recipients: string[] = []
+  if (meIsMaster) {
+    const { data } = await supabase
+      .from('removal_report_recipients')
+      .select('email')
+      .order('email')
+    recipients = (data ?? []).map((r) => r.email)
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -188,6 +229,13 @@ export default async function UsersPage() {
         createUser={createUser}
         updateUser={updateUser}
       />
+      {meIsMaster && (
+        <ReportRecipients
+          initial={recipients}
+          addRecipient={addRecipient}
+          removeRecipient={removeRecipient}
+        />
+      )}
     </div>
   )
 }

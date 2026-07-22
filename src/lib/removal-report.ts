@@ -107,16 +107,16 @@ export function buildReport(date: string, rows: ReportRow[], late: boolean) {
 type SendResult = { ok: true; id: string } | { ok: false; error: string }
 
 /** Envía por la API REST de Resend. Devuelve ok solo si Resend aceptó el mensaje. */
-export async function sendReportEmail(subject: string, html: string): Promise<SendResult> {
+export async function sendReportEmail(
+  subject: string,
+  html: string,
+  to: string[]
+): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY
   const from = process.env.REMOVAL_REPORT_FROM || 'SWR Reports <hola@ekinoxis.xyz>'
-  const to = (process.env.REMOVAL_REPORT_TO || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
 
   if (!key) return { ok: false, error: 'RESEND_API_KEY not configured' }
-  if (!to.length) return { ok: false, error: 'REMOVAL_REPORT_TO not configured' }
+  if (!to.length) return { ok: false, error: 'No hay destinatarios configurados' }
 
   try {
     const res = await fetch('https://api.resend.com/emails', {

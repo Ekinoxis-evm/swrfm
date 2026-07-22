@@ -95,8 +95,14 @@ Gmail. Aquí es un **Vercel Cron** que llama a `/api/cron/removal-report` y env�
 - **Autenticación:** `Authorization: Bearer $CRON_SECRET`, que es como Vercel invoca sus
   crons. `/api/cron/*` está exento del middleware de sesión (si no, lo redirigía al login).
 
-Variables (ver `.env.example`): `RESEND_API_KEY`, `REMOVAL_REPORT_FROM`,
-`REMOVAL_REPORT_TO` (coma-separado; **vacío = no envía nada**), `CRON_SECRET`.
+**Destinatarios — los define el master admin, no una env var.** La tabla
+`removal_report_recipients` es la fuente de verdad; se edita desde **/users** (sección visible
+solo para masters, respaldada por RLS `is_master`). El cron la lee con la service key. Si la
+tabla está **vacía**, cae a `REMOVAL_REPORT_TO` como respaldo — útil en la transición o si
+nadie ha configurado la lista. Con ambos vacíos no se envía nada.
+
+Variables (ver `.env.example`): `RESEND_API_KEY`, `REMOVAL_REPORT_FROM`, `CRON_SECRET`, y
+`REMOVAL_REPORT_TO` **solo como respaldo** de la tabla.
 
 Probado de extremo a extremo contra el endpoint real: sin bearer → 401 · reenvío del
 2026-07-15 → entregado por Resend a los dos destinatarios · pasada automática → envía hoy y

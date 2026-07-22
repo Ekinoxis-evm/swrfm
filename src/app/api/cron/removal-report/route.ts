@@ -28,8 +28,25 @@ function db(path: string, init?: RequestInit) {
   })
 }
 
+/**
+ * Destinatarios: la tabla que edita el master admin es la fuente de verdad; si está vacía,
+ * cae al `REMOVAL_REPORT_TO` de entorno como respaldo (útil durante la transición o si nadie
+ * ha configurado la lista todavía).
+ */
+async function recipients(): Promise<string[]> {
+  const res = await db('/removal_report_recipients?select=email')
+  if (res.ok) {
+    const rows = (await res.json()) as { email: string }[]
+    if (rows.length) return rows.map((r) => r.email)
+  }
+  return (process.env.REMOVAL_REPORT_TO || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
 /** Envía el reporte de un día si no salió ya. Devuelve qué pasó, para el log del cron. */
-async function reportFor(day: string, late: boolean, force = false) {
+async function reportFor(day: string, late: boolean, to: string[], force = false) {
   if (!force) {
     const sentRes = await db(`/removal_report_log?local_date=eq.${day}&select=local_date`)
     if (!sentRes.ok) return { day, status: 'error', error: `report_log ${sentRes.status}` }
@@ -43,7 +60,7 @@ async function reportFor(day: string, late: boolean, force = false) {
   const rows = (await rowsRes.json()) as ReportRow[]
 
   const { subject, html, entries, unsigned } = buildReport(day, rows, late)
-  const sent = await sendReportEmail(subject, html)
+  const sent = await sendReportEmail(subject, html, to)
   // Se marca como enviado SOLO si Resend aceptó — si no, la próxima pasada reintenta.
   if (!sent.ok) return { day, status: 'send_failed', error: sent.error }
 
@@ -67,16 +84,18 @@ export async function GET(request: Request) {
   try {
     // Reenvío manual de un día concreto: `?date=YYYY-MM-DD`. Ignora el registro de
     // enviados a propósito — se pide explícitamente, no es la pasada automática.
+    const to = await recipients()
+
     const date = new URL(request.url).searchParams.get('date')
     if (date) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         return NextResponse.json({ ok: false, error: 'date must be YYYY-MM-DD' }, { status: 400 })
       }
-      return NextResponse.json({ ok: true, resend: await reportFor(date, false, true) })
+      return NextResponse.json({ ok: true, resend: await reportFor(date, false, to, true) })
     }
 
-    const today = await reportFor(marketDay(), false)
-    const yesterday = await reportFor(marketDay(-1), true)
+    const today = await reportFor(marketDay(), false, to)
+    const yesterday = await reportFor(marketDay(-1), true, to)
     return NextResponse.json({ ok: true, today, yesterday })
   } catch (e) {
     const error = e instanceof Error ? e.message : 'Cron failed'
