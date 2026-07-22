@@ -134,23 +134,18 @@ export default function InventoryPage() {
       }
     } else {
       if (n > 0) {
-        const { data: removal, error } = await supabase
-          .from('removals')
-          .insert({ toast_guid: row.toast_guid, item_name: row.name, qty: n, removed_by: user?.id })
-          .select('id')
-          .single()
+        // Retiro por unidad suelta: la RPC escribe el retiro y el movimiento del ledger
+        // en una sola transacción (antes eran dos inserts que podían quedar a medias).
+        const { error } = await supabase.rpc('log_removal', {
+          p_toast_guid: row.toast_guid,
+          p_qty: n,
+          p_remove_by: 'unit',
+        })
         if (error) {
           alert(error.message)
           setSaving(false)
           return
         }
-        await supabase.from('inventory_movements').insert({
-          toast_guid: row.toast_guid,
-          delta: -n,
-          reason: 'removal',
-          ref_id: removal.id,
-          created_by: user?.id,
-        })
         setRows((prev) =>
           prev.map((r) =>
             r.toast_guid === row.toast_guid ? { ...r, on_hand: r.on_hand - n } : r

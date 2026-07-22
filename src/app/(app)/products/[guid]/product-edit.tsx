@@ -14,6 +14,8 @@ type Product = {
   vendor_id: string | null
   price_cents: number | null
   cooler_relevant: boolean
+  units_per_case: number | null
+  low_stock_cases: number | null
   archived_at: string | null
 }
 
@@ -99,6 +101,32 @@ export default function ProductEdit({
               </option>
             ))}
           </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={label}>Units per case</label>
+            <input
+              name="units_per_case"
+              type="number"
+              min={1}
+              defaultValue={product.units_per_case ?? ''}
+              placeholder="e.g. 12"
+              className={input}
+            />
+            <p className="mt-1 text-[11px] text-ink-3">
+              Needed to remove by the case. Empty = this product is handled by unit only.
+            </p>
+          </div>
+          <div>
+            <label className={label}>Low stock (cases)</label>
+            <input
+              name="low_stock_cases"
+              type="number"
+              min={0}
+              defaultValue={product.low_stock_cases ?? 2}
+              className={input}
+            />
+          </div>
         </div>
         <label className="flex items-center gap-2 text-sm font-semibold text-ink-2">
           <input

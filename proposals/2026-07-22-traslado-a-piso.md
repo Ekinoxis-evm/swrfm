@@ -4,6 +4,10 @@
 - **Propone:** William (análisis del handoff de Ruben: `swarm_buildapp/docs/removal handoff/`)
 - **Objetivo del plan:** 1 · Inventario maestro con roles
 - **Estado:** Borrador → para revisión con Ruben el viernes
+- **Nota:** el **puerto fiel** del removal legado ya está implementado (ver
+  `docs/REMOVAL_HANDOFF.md`) para poder apagar `removal.html` sin esperar estas decisiones.
+  Esta propuesta se construye encima: el ledger ya lleva dimensiones caja/unidad; falta la
+  dimensión `location` y la pantalla de escaneo.
 
 ## El problema
 
