@@ -15,6 +15,8 @@ type Row = {
   price_cents: number | null
   shopify_handle: string | null
   on_hand: number
+  storage_on_hand: number
+  floor_on_hand: number
   next_expiry: string | null
 }
 
@@ -57,15 +59,26 @@ export default function InventoryPage() {
           .is('archived_at', null)
           .order('name')
           .limit(2000),
-        supabase.from('inventory_levels').select('toast_guid, on_hand'),
+        supabase.from('inventory_levels').select('toast_guid, on_hand, storage_on_hand, floor_on_hand'),
         supabase.from('product_next_expiry').select('toast_guid, next_expiry'),
       ])
-      const level = new Map((levels ?? []).map((l) => [l.toast_guid, Number(l.on_hand)]))
+      const level = new Map(
+        (levels ?? []).map((l) => [
+          l.toast_guid,
+          {
+            on_hand: Number(l.on_hand),
+            storage: Number(l.storage_on_hand),
+            floor: Number(l.floor_on_hand),
+          },
+        ])
+      )
       const exp = new Map((expiry ?? []).map((e) => [e.toast_guid, e.next_expiry as string]))
       setRows(
         (products ?? []).map((p) => ({
           ...p,
-          on_hand: level.get(p.toast_guid) ?? 0,
+          on_hand: level.get(p.toast_guid)?.on_hand ?? 0,
+          storage_on_hand: level.get(p.toast_guid)?.storage ?? 0,
+          floor_on_hand: level.get(p.toast_guid)?.floor ?? 0,
           next_expiry: exp.get(p.toast_guid) ?? null,
         })) as Row[]
       )
@@ -79,10 +92,22 @@ export default function InventoryPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'inventory_levels' },
         (payload) => {
-          const rec = payload.new as { toast_guid: string; on_hand: number }
+          const rec = payload.new as {
+            toast_guid: string
+            on_hand: number
+            storage_on_hand: number
+            floor_on_hand: number
+          }
           setRows((prev) =>
             prev.map((r) =>
-              r.toast_guid === rec.toast_guid ? { ...r, on_hand: Number(rec.on_hand) } : r
+              r.toast_guid === rec.toast_guid
+                ? {
+                    ...r,
+                    on_hand: Number(rec.on_hand),
+                    storage_on_hand: Number(rec.storage_on_hand),
+                    floor_on_hand: Number(rec.floor_on_hand),
+                  }
+                : r
             )
           )
         }
@@ -251,31 +276,48 @@ export default function InventoryPage() {
                         </button>
                       </span>
                     ) : (
-                      <button
-                        onClick={() => {
-                          setEdit({ guid: r.toast_guid, kind: 'count' })
-                          setVal(String(r.on_hand))
-                        }}
-                        title="Count / adjust"
-                        className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-brand-soft"
-                      >
-                        {r.on_hand}
-                        <span className="text-xs text-ink-3 opacity-60 group-hover:opacity-100">✎</span>
-                      </button>
+                      <span className="inline-flex flex-col items-end">
+                        <button
+                          onClick={() => {
+                            setEdit({ guid: r.toast_guid, kind: 'count' })
+                            setVal(String(r.on_hand))
+                          }}
+                          title="Count / adjust"
+                          className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-brand-soft"
+                        >
+                          {r.on_hand}
+                          <span className="text-xs text-ink-3 opacity-60 group-hover:opacity-100">✎</span>
+                        </button>
+                        {/* Trace storage vs piso — el desglose que pediste ver. */}
+                        <span className="px-2 text-[11px] font-normal text-ink-3">
+                          <span title="In storage (cooler)">🧊 {r.storage_on_hand}</span>
+                          {' · '}
+                          <span title="On the sales floor">🛒 {r.floor_on_hand}</span>
+                        </span>
+                      </span>
                     )}
                   </td>
-                  <td className="px-2 py-2.5 text-right">
+                  <td className="whitespace-nowrap px-2 py-2.5 text-right">
                     {!isEditing && (
-                      <button
-                        onClick={() => {
-                          setEdit({ guid: r.toast_guid, kind: 'remove' })
-                          setVal('1')
-                        }}
-                        title="Remove from cooler (logged & signed off)"
-                        className="rounded-lg bg-coral-soft px-2.5 py-1 text-xs font-bold text-coral hover:bg-coral hover:text-white"
-                      >
-                        −
-                      </button>
+                      <span className="inline-flex gap-1.5">
+                        <Link
+                          href={`/transfers?guid=${r.toast_guid}`}
+                          title="Move between storage and floor (needs manager approval)"
+                          className="rounded-lg bg-brand-soft px-2.5 py-1 text-xs font-bold text-brand hover:bg-brand hover:text-white"
+                        >
+                          Move
+                        </Link>
+                        <button
+                          onClick={() => {
+                            setEdit({ guid: r.toast_guid, kind: 'remove' })
+                            setVal('1')
+                          }}
+                          title="Waste / definitive removal (reduces total)"
+                          className="rounded-lg bg-coral-soft px-2.5 py-1 text-xs font-bold text-coral hover:bg-coral hover:text-white"
+                        >
+                          −
+                        </button>
+                      </span>
                     )}
                   </td>
                 </tr>

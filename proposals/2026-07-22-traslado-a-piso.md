@@ -66,4 +66,22 @@ Sin menús, sin dropdowns de vendor, sin teclear nombres. El barcode trae todo. 
 
 ## Decisión
 
-*(Se llena tras la revisión del viernes.)*
+**Implementada** (fase 1) — decisiones de William en sesión:
+
+- El traslado es una **transferencia bidireccional** storage ↔ piso; no cambia el total.
+- El empleado **solicita** (queda `pending`, sin mover saldo); el admin **aprueba** o
+  **rechaza**. Recién al aprobar se mueven los saldos (−origen, +destino).
+- La solicitud es un **wizard de 3 pasos** (Sentido → Producto → Cantidad).
+- El inventario muestra el desglose **storage · piso** por producto (el "trace").
+
+Qué quedó y qué falta:
+
+- **Ledger con `location`** (storage/floor) y saldos por ubicación en `inventory_levels`.
+  Migración `supabase/migrations/20260723_floor_transfers.sql`.
+- **Tabla `stock_transfers`** + funciones `request_transfer` / `approve_transfer` /
+  `reject_transfer`, todo gateado por rol en Postgres (staff solicita, admin decide).
+- **Pantalla `/transfers`** (wizard + cola de aprobación, tiempo real) e inventario con el
+  desglose y el botón **Move**.
+- **Pendiente:** el escaneo de barcode del paso 2 (hoy es búsqueda por nombre) y la baja
+  del piso al **vender** (integración de ventas de Toast) — mientras tanto el piso se cuadra
+  con el conteo físico. Las 4 preguntas para Ruben siguen abiertas.

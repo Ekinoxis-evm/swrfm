@@ -9,6 +9,8 @@ const NAV = {
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/inventory', label: 'Inventory' },
     { href: '/receiving', label: 'Receiving' },
+    { href: '/transfers', label: 'Transfers' },
+    { href: '/removals', label: 'Removals' },
     { href: '/market-days', label: 'Market days' },
     { href: '/vendors', label: 'Vendors' },
     { href: '/users', label: 'Users' },
@@ -16,6 +18,8 @@ const NAV = {
   staff: [
     { href: '/inventory', label: 'Inventory' },
     { href: '/receiving', label: 'Receiving' },
+    { href: '/transfers', label: 'Transfers' },
+    { href: '/removals', label: 'Removals' },
     { href: '/market-days', label: 'Market days' },
   ],
   vendor: [{ href: '/vendor', label: 'My portal' }],
