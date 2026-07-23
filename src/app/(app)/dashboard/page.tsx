@@ -34,6 +34,28 @@ function hoursSince(iso: string | null): number {
   return iso ? (Date.now() - new Date(iso).getTime()) / 3.6e6 : Number.POSITIVE_INFINITY
 }
 
+// Start of the current America/New_York day as a UTC ISO string (DST-safe).
+function startOfMarketDayISO(): string {
+  const now = new Date()
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+      .formatToParts(now)
+      .map((x) => [x.type, x.value])
+  )
+  const wallAsUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second)
+  const offsetMs = wallAsUtc - now.getTime() // ET offset from UTC
+  return new Date(Date.UTC(+p.year, +p.month - 1, +p.day, 0, 0, 0) - offsetMs).toISOString()
+}
+
 // How each ledger reason reads in the activity feed.
 const REASON: Record<string, { label: string; tone: 'ok' | 'warn' | 'crit' | 'cold' | 'warm' | 'neutral' }> = {
   receiving: { label: 'Received', tone: 'cold' },
@@ -62,6 +84,7 @@ export default async function DashboardPage() {
     shopifyLinked,
     noBarcode,
     lastSyncRow,
+    salesToday,
   ] = await Promise.all([
     supabase
       .from('products')
@@ -99,6 +122,14 @@ export default async function DashboardPage() {
       .is('archived_at', null)
       .is('barcode', null),
     supabase.from('products').select('synced_at').order('synced_at', { ascending: false }).limit(1).maybeSingle(),
+    // Toast sales posted today (floor drawdown)
+    supabase
+      .from('inventory_movements')
+      .select('delta, created_at, products(name, vendor_name)')
+      .eq('reason', 'sale_toast')
+      .gte('created_at', startOfMarketDayISO())
+      .order('created_at', { ascending: false })
+      .limit(5000),
   ])
 
   const activeCount = products.count ?? 0
@@ -107,6 +138,24 @@ export default async function DashboardPage() {
   const noBarcodeCount = noBarcode.count ?? 0
   const lastSync = (lastSyncRow.data as { synced_at: string } | null)?.synced_at ?? null
   const syncAgeHours = hoursSince(lastSync)
+
+  // Toast sales today
+  const saleRows = (salesToday.data ?? []) as unknown as {
+    delta: number
+    created_at: string
+    products: { name: string; vendor_name: string | null } | null
+  }[]
+  const soldUnits = saleRows.reduce((s, r) => s + -Number(r.delta), 0)
+  const lastSaleAt = saleRows[0]?.created_at ?? null
+  const byProduct = new Map<string, { units: number; vendor: string | null }>()
+  for (const r of saleRows) {
+    const name = r.products?.name ?? '—'
+    const cur = byProduct.get(name) ?? { units: 0, vendor: r.products?.vendor_name ?? null }
+    cur.units += -Number(r.delta)
+    byProduct.set(name, cur)
+  }
+  const topSellers = [...byProduct.entries()].sort((a, b) => b[1].units - a[1].units).slice(0, 6)
+  const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
   const stats = [
     { label: 'Active products', value: products.count ?? 0, tone: 'text-cold' },
@@ -132,6 +181,45 @@ export default async function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {saleRows.length > 0 && (
+        <section className="rounded-2xl border border-line bg-surface p-5">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-bold">Toast sales today</h2>
+              <p className="text-sm text-ink-3">
+                Drawing down the floor in real time · last sale {relativeTime(lastSaleAt)}
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="tnum text-3xl font-bold text-warm">{fmtUnits(soldUnits)}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-ink-3">
+                units sold · {saleRows.length} lines
+              </div>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+                  <th className="py-2 pr-4">Top sellers</th>
+                  <th className="py-2 pr-4">Vendor</th>
+                  <th className="py-2 text-right">Sold</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {topSellers.map(([name, v]) => (
+                  <tr key={name}>
+                    <td className="py-2 pr-4 font-semibold">{name}</td>
+                    <td className="py-2 pr-4 text-ink-3">{v.vendor ?? '—'}</td>
+                    <td className="tnum py-2 text-right font-bold text-warm">{fmtUnits(v.units)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-2xl border border-line bg-surface p-5">
