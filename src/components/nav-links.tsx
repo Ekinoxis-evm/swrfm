@@ -7,14 +7,17 @@ export default function NavLinks({
   items,
   mobile = false,
 }: {
-  items: readonly { href: string; label: string }[]
+  items: readonly { href: string; label: string; activePaths?: readonly string[] }[]
   mobile?: boolean
 }) {
   const pathname = usePathname()
   return (
     <>
       {items.map((n) => {
-        const active = pathname === n.href || pathname.startsWith(n.href + '/')
+        // A section hub stays highlighted across all its sub-pages.
+        const active = n.activePaths
+          ? n.activePaths.some((p) => pathname === p || pathname.startsWith(p + '/'))
+          : pathname === n.href || pathname.startsWith(n.href + '/')
         return (
           <Link
             key={n.href}

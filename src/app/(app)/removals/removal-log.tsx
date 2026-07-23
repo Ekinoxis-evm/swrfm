@@ -341,7 +341,7 @@ function removalColumns({
 }: {
   isManager: boolean
   busy: boolean
-  run: (fn: () => Promise<{ error: { message: string } | null }>, ok?: string) => Promise<boolean>
+  run: (fn: () => Promise<{ error: { message: string } | null }>) => Promise<void>
   editing: string | null
   editQty: number
   setEditing: (id: string | null) => void

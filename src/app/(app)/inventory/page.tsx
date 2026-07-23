@@ -4,7 +4,7 @@
 // fría (almacén) y cálida (piso) en columnas propias, ordenables y filtrables. Acciones:
 // Move (traslado a piso, con aprobación), conteo físico (inline, un solo número) y merma.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import DataTable, { type Column } from '@/components/data-table'
@@ -45,8 +45,6 @@ export default function InventoryPage() {
   const [edit, setEdit] = useState<EditMode>(null)
   const [val, setVal] = useState('')
   const [saving, setSaving] = useState(false)
-  const [coolerOnly, setCoolerOnly] = useState(false)
-  const [needsAttn, setNeedsAttn] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -117,13 +115,6 @@ export default function InventoryPage() {
       supabase.removeChannel(channel)
     }
   }, [])
-
-  const visible = useMemo(() => {
-    let out = rows
-    if (coolerOnly) out = out.filter((r) => r.cooler_relevant)
-    if (needsAttn) out = out.filter((r) => status(r).tone !== 'ok')
-    return out
-  }, [rows, coolerOnly, needsAttn])
 
   async function save(row: Row) {
     const n = Number(val)
@@ -353,9 +344,7 @@ export default function InventoryPage() {
         <div>
           <h1 className="text-xl font-bold">Master inventory</h1>
           <p className="text-sm text-ink-3">
-            {loading
-              ? 'Loading…'
-              : `${rows.length} products · ${visible.length} shown · cold = storage, warm = floor`}
+            {loading ? 'Loading…' : `${rows.length} products · cold = storage, warm = floor`}
           </p>
         </div>
         <Link
@@ -367,48 +356,15 @@ export default function InventoryPage() {
       </div>
 
       <DataTable
-        rows={visible}
+        rows={rows}
         columns={columns}
         getKey={(r) => r.toast_guid}
         searchText={(r) => `${r.name} ${r.category ?? ''} ${r.vendor_name ?? ''}`}
         searchPlaceholder="Search product, category, vendor…"
         initialSort={{ key: 'name', dir: 'asc' }}
         limit={200}
-        emptyText={loading ? 'Loading inventory…' : 'No products match these filters.'}
-        toolbar={
-          <>
-            <FilterPill on={coolerOnly} onClick={() => setCoolerOnly((v) => !v)}>
-              Cooler only
-            </FilterPill>
-            <FilterPill on={needsAttn} onClick={() => setNeedsAttn((v) => !v)}>
-              Needs attention
-            </FilterPill>
-          </>
-        }
+        emptyText={loading ? 'Loading inventory…' : 'No products match your search.'}
       />
     </div>
-  )
-}
-
-function FilterPill({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-lg border px-3 py-2 text-xs font-bold uppercase tracking-wide transition ${
-        on
-          ? 'border-cold bg-cold-soft text-cold'
-          : 'border-line-2 bg-surface text-ink-2 hover:bg-surface-2'
-      }`}
-    >
-      {children}
-    </button>
   )
 }

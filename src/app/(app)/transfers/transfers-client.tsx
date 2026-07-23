@@ -77,6 +77,7 @@ export default function Transfers({
   const [open, setOpen] = useState(() => Boolean(prefillGuid))
   const [step, setStep] = useState(0)
   const [dir, setDir] = useState<Direction>('to_floor')
+  const [vendor, setVendor] = useState('')
   const [guid, setGuid] = useState(prefillGuid)
   const [q, setQ] = useState('')
   const [qty, setQty] = useState(1)
@@ -123,12 +124,26 @@ export default function Transfers({
   const selected = useMemo(() => levels.find((p) => p.toast_guid === guid) ?? null, [levels, guid])
   const maxQty = selected ? sourceQty(selected, dir) : 0
 
+  // Vendors that have stock in the source location for the chosen direction — so the
+  // vendor step never offers a provider with nothing to move.
+  const vendors = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of levels) {
+      if (sourceQty(p, dir) <= 0) continue
+      const v = p.vendor_name ?? 'No vendor'
+      counts.set(v, (counts.get(v) ?? 0) + 1)
+    }
+    return [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [levels, dir])
+
+  // Products for the chosen vendor with stock in the source location, filtered by search.
   const matches = useMemo(() => {
     const t = q.trim().toLowerCase()
-    // En cada sentido solo tiene sentido mover lo que hay en el origen.
-    const withStock = levels.filter((p) => sourceQty(p, dir) > 0)
-    return t ? withStock.filter((p) => p.name.toLowerCase().includes(t)) : withStock
-  }, [levels, q, dir])
+    const inScope = levels.filter(
+      (p) => sourceQty(p, dir) > 0 && (p.vendor_name ?? 'No vendor') === vendor
+    )
+    return t ? inScope.filter((p) => p.name.toLowerCase().includes(t)) : inScope
+  }, [levels, q, dir, vendor])
 
   const pending = rows.filter((r) => r.status === 'pending')
 
@@ -136,6 +151,7 @@ export default function Transfers({
     setOpen(false)
     setStep(0)
     setDir('to_floor')
+    setVendor('')
     setGuid('')
     setQ('')
     setQty(1)
@@ -215,7 +231,7 @@ export default function Transfers({
             </button>
           </div>
 
-          <WizardSteps steps={['Direction', 'Product', 'Amount']} current={step} />
+          <WizardSteps steps={['Direction', 'Vendor', 'Product', 'Amount']} current={step} />
 
           {step === 0 && (
             <div className="grid gap-3 sm:grid-cols-2">
@@ -224,19 +240,21 @@ export default function Transfers({
                   key={d}
                   onClick={() => {
                     setDir(d)
-                    // Si venías con un producto preseleccionado y tiene stock en ese origen,
-                    // salta directo a la cantidad; si no, elige producto.
+                    // Coming from the inventory "Move" button with a product preselected:
+                    // set its vendor and skip straight to amount if it has source stock.
                     const pre = levels.find((p) => p.toast_guid === guid)
                     if (pre && sourceQty(pre, d) > 0) {
+                      setVendor(pre.vendor_name ?? 'No vendor')
                       setQty(1)
-                      setStep(2)
+                      setStep(3)
                     } else {
+                      setVendor('')
                       setGuid('')
                       setStep(1)
                     }
                   }}
                   className={`rounded-xl border-2 p-5 text-left transition ${
-                    dir === d ? 'border-brand bg-brand-soft' : 'border-line-2 hover:bg-surface-2'
+                    dir === d ? 'border-warm bg-warm-soft' : 'border-line-2 hover:bg-surface-2'
                   }`}
                 >
                   <div className="text-lg font-bold">{DIR_LABEL[d]}</div>
@@ -252,13 +270,51 @@ export default function Transfers({
 
           {step === 1 && (
             <div>
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                autoFocus
-                placeholder="Search product…"
-                className="mb-3 w-full rounded-lg border border-line-2 bg-cream px-3 py-2.5 outline-none focus:border-brand"
-              />
+              <p className="mb-3 text-sm text-ink-3">
+                Which vendor’s product are you moving {dir === 'to_floor' ? 'to the floor' : 'back to storage'}?
+              </p>
+              <div className="max-h-72 divide-y divide-line overflow-y-auto rounded-lg border border-line-2">
+                {vendors.map((v) => (
+                  <button
+                    key={v.name}
+                    onClick={() => {
+                      setVendor(v.name)
+                      setQ('')
+                      setGuid('')
+                      setStep(2)
+                    }}
+                    className="flex w-full items-center justify-between px-3 py-2.5 text-left hover:bg-surface-2"
+                  >
+                    <span className="font-semibold">{v.name}</span>
+                    <span className="tnum shrink-0 text-xs font-bold text-ink-3">
+                      {v.count} {v.count === 1 ? 'product' : 'products'}
+                    </span>
+                  </button>
+                ))}
+                {!vendors.length && (
+                  <p className="px-3 py-6 text-center text-sm text-ink-3">
+                    Nothing with stock in {dir === 'to_floor' ? 'storage' : 'the floor'}.
+                  </p>
+                )}
+              </div>
+              <WizardNav onBack={() => setStep(0)} onNext={() => setStep(1)} nextLabel="Pick a vendor" nextDisabled />
+            </div>
+          )}
+
+          {step === 2 && (
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <span className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-bold text-ink-2">
+                  {vendor}
+                </span>
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  autoFocus
+                  placeholder="Search product…"
+                  className="flex-1 rounded-lg border border-line-2 bg-surface-2 px-3 py-2.5 outline-none focus:border-brand"
+                />
+              </div>
               <div className="max-h-72 divide-y divide-line overflow-y-auto rounded-lg border border-line-2">
                 {matches.slice(0, 100).map((p) => (
                   <button
@@ -266,36 +322,37 @@ export default function Transfers({
                     onClick={() => {
                       setGuid(p.toast_guid)
                       setQty(1)
-                      setStep(2)
+                      setStep(3)
                     }}
-                    className="flex w-full items-center justify-between px-3 py-2.5 text-left hover:bg-cream"
+                    className="flex w-full items-center justify-between px-3 py-2.5 text-left hover:bg-surface-2"
                   >
-                    <span>
-                      <span className="font-semibold">{p.name}</span>
-                      <span className="block text-[11px] text-ink-3">{p.vendor_name ?? ''}</span>
-                    </span>
-                    <span className="shrink-0 text-xs font-bold text-ink-3">
+                    <span className="font-semibold">{p.name}</span>
+                    <span
+                      className={`tnum shrink-0 rounded-md px-1.5 py-0.5 text-xs font-bold ${
+                        dir === 'to_floor' ? 'bg-cold-soft text-cold' : 'bg-warm-soft text-warm'
+                      }`}
+                    >
                       {sourceQty(p, dir)} in {dir === 'to_floor' ? 'storage' : 'floor'}
                     </span>
                   </button>
                 ))}
                 {!matches.length && (
-                  <p className="px-3 py-6 text-center text-sm text-ink-3">
-                    Nothing with stock in {dir === 'to_floor' ? 'storage' : 'the floor'}.
-                  </p>
+                  <p className="px-3 py-6 text-center text-sm text-ink-3">No products match.</p>
                 )}
               </div>
-              <WizardNav onBack={() => setStep(0)} onNext={() => setStep(1)} nextLabel="Pick a product" nextDisabled />
+              <WizardNav onBack={() => setStep(1)} onNext={() => setStep(2)} nextLabel="Pick a product" nextDisabled />
             </div>
           )}
 
-          {step === 2 && selected && (
+          {step === 3 && selected && (
             <div>
-              <div className="rounded-xl border border-line-2 bg-cream p-4">
+              <div className="rounded-xl border border-line-2 bg-surface-2 p-4">
                 <div className="text-lg font-bold">{selected.name}</div>
                 <div className="mt-1 text-sm text-ink-3">
-                  {DIR_LABEL[dir]} · {maxQty} available in{' '}
-                  {dir === 'to_floor' ? 'storage' : 'the floor'}
+                  {selected.vendor_name ?? 'No vendor'} · {DIR_LABEL[dir]} ·{' '}
+                  <span className={dir === 'to_floor' ? 'font-semibold text-cold' : 'font-semibold text-warm'}>
+                    {maxQty} available in {dir === 'to_floor' ? 'storage' : 'the floor'}
+                  </span>
                 </div>
                 <div className="mt-4 flex items-center gap-2">
                   <button
@@ -312,7 +369,7 @@ export default function Transfers({
                     onChange={(e) =>
                       setQty(Math.min(maxQty, Math.max(1, Number(e.target.value) || 1)))
                     }
-                    className="w-24 rounded-lg border border-line-2 bg-surface px-2 py-3 text-center text-lg font-bold"
+                    className="tnum w-24 rounded-lg border border-line-2 bg-surface px-2 py-3 text-center text-lg font-bold"
                   />
                   <button
                     onClick={() => setQty((n) => Math.min(maxQty, n + 1))}
@@ -330,7 +387,7 @@ export default function Transfers({
                 />
               </div>
               <WizardNav
-                onBack={() => setStep(1)}
+                onBack={() => setStep(2)}
                 onNext={submit}
                 nextLabel="Request transfer"
                 nextDisabled={qty < 1 || qty > maxQty}
