@@ -19,6 +19,10 @@ async function updateProduct(formData: FormData) {
     const { data: vendor } = await supabase.from('vendors').select('name').eq('id', vendorId).single()
     vendorName = vendor?.name ?? null
   }
+  // Unidades por caja: vacío = el producto solo se maneja por unidad (el selector de
+  // retiros deshabilita el modo "case" cuando falta).
+  const upc = Number(formData.get('units_per_case'))
+  const low = Number(formData.get('low_stock_cases'))
   await supabase
     .from('products')
     .update({
@@ -27,6 +31,8 @@ async function updateProduct(formData: FormData) {
       vendor_id: vendorId,
       vendor_name: vendorName,
       cooler_relevant: formData.get('cooler_relevant') === 'on',
+      units_per_case: Number.isFinite(upc) && upc > 0 ? Math.round(upc) : null,
+      low_stock_cases: Number.isFinite(low) && low >= 0 ? Math.round(low) : 2,
     })
     .eq('toast_guid', guid)
   revalidatePath(`/products/${guid}`)
@@ -74,7 +80,7 @@ export default async function ProductPage({ params }: { params: Promise<{ guid: 
       supabase
         .from('products')
         .select(
-          'toast_guid, name, category, vendor_name, vendor_id, price_cents, barcode, shopify_handle, cooler_relevant, archived_at'
+          'toast_guid, name, category, vendor_name, vendor_id, price_cents, barcode, shopify_handle, cooler_relevant, units_per_case, low_stock_cases, archived_at'
         )
         .eq('toast_guid', guid)
         .single(),
@@ -167,6 +173,8 @@ export default async function ProductPage({ params }: { params: Promise<{ guid: 
             vendor_id: product.vendor_id,
             price_cents: product.price_cents,
             cooler_relevant: Boolean(product.cooler_relevant),
+            units_per_case: product.units_per_case,
+            low_stock_cases: product.low_stock_cases,
             archived_at: product.archived_at,
           }}
           vendors={vendors ?? []}

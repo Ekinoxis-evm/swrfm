@@ -26,13 +26,22 @@ export default async function ReceivingDetailPage({
     workflow_type: string
   }
 
-  const { data: products } = await supabase
-    .from('products')
-    .select('toast_guid, name, category')
-    .eq('vendor_id', vendor.id)
-    .eq('active', true)
-    .is('archived_at', null)
-    .order('name')
+  const [{ data: products }, { data: charge }] = await Promise.all([
+    supabase
+      .from('products')
+      .select('toast_guid, name, category')
+      .eq('vendor_id', vendor.id)
+      .eq('active', true)
+      .is('archived_at', null)
+      .order('name'),
+    // The vendor's own invoice for this delivery, if they've submitted it.
+    supabase
+      .from('vendor_charges')
+      .select('id, amount_cents, status')
+      .eq('session_id', id)
+      .order('submitted_at', { ascending: false })
+      .maybeSingle(),
+  ])
 
   return (
     <ReceivingEditor
@@ -44,6 +53,9 @@ export default async function ReceivingDetailPage({
         vendorName: vendor.name,
         workflowType: vendor.workflow_type,
       }}
+      linkedCharge={
+        charge ? { amountCents: charge.amount_cents, status: charge.status as string } : null
+      }
       products={products ?? []}
       me={{ id: profile.id, name: profile.full_name, role: profile.role }}
     />

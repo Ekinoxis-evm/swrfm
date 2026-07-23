@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/removal-report",
+      "schedule": "55 3 * * *"
+    },
+    {
+      "path": "/api/cron/toast-sales",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}

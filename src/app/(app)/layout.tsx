@@ -3,19 +3,22 @@ import Link from 'next/link'
 import { getSessionProfile } from '@/lib/supabase/server'
 import SignOutButton from '@/components/sign-out-button'
 import NavLinks from '@/components/nav-links'
+import SubNav from '@/components/sub-nav'
+
+// Inventory is a hub: its sub-pages (master list, transfers, receiving) live under a
+// secondary tab row, so the top nav stays short. The hub item highlights across all of them.
+const INVENTORY_HUB = ['/inventory', '/transfers', '/receiving']
 
 const NAV = {
   admin: [
     { href: '/dashboard', label: 'Dashboard' },
-    { href: '/inventory', label: 'Inventory' },
-    { href: '/receiving', label: 'Receiving' },
+    { href: '/inventory', label: 'Inventory', activePaths: INVENTORY_HUB },
     { href: '/market-days', label: 'Market days' },
     { href: '/vendors', label: 'Vendors' },
     { href: '/users', label: 'Users' },
   ],
   staff: [
-    { href: '/inventory', label: 'Inventory' },
-    { href: '/receiving', label: 'Receiving' },
+    { href: '/inventory', label: 'Inventory', activePaths: INVENTORY_HUB },
     { href: '/market-days', label: 'Market days' },
   ],
   vendor: [{ href: '/vendor', label: 'My portal' }],
@@ -66,6 +69,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2 sm:hidden">
           <NavLinks items={NAV[profile.role]} mobile />
         </nav>
+        <SubNav />
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
     </div>
