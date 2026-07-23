@@ -3,8 +3,18 @@ import { revalidatePath } from 'next/cache'
 import { createClient, getSessionProfile } from '@/lib/supabase/server'
 import { uploadDocument, signedDocUrl } from '@/lib/storage'
 import VendorTabs from '@/components/vendor-tabs'
+import { StatusPill } from '@/components/thermal'
 
 export const dynamic = 'force-dynamic'
+
+// Accounts-payable status as a chip tone.
+const CHARGE_TONE: Record<string, 'ok' | 'warn' | 'crit' | 'cold' | 'neutral'> = {
+  submitted: 'warn',
+  review: 'cold',
+  approved: 'ok',
+  paid: 'neutral',
+  rejected: 'crit',
+}
 
 async function setStatus(formData: FormData) {
   'use server'
@@ -96,36 +106,42 @@ export default async function ChargesPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="font-bold">
-                    {(c.vendors as unknown as { name: string } | null)?.name} — $
-                    {(c.amount_cents / 100).toFixed(2)}
+                    {(c.vendors as unknown as { name: string } | null)?.name}{' '}
+                    <span className="tnum">— ${(c.amount_cents / 100).toFixed(2)}</span>
                   </div>
                   <div className="text-xs text-ink-3">
-                    {c.description ?? '—'} ·{' '}
-                    {new Date(c.submitted_at).toLocaleDateString('en-US')}
-                    {session ? ` · linked to delivery ${session.date}` : ' · not linked'}
+                    {c.description ?? '—'} · {new Date(c.submitted_at).toLocaleDateString('en-US')}
+                    {session ? (
+                      <>
+                        {' · '}
+                        <span className="font-semibold text-cold">
+                          {session.invoice_no ? `Invoice ${session.invoice_no}` : 'delivery'} · {session.date}
+                        </span>
+                      </>
+                    ) : (
+                      ' · not linked to a delivery'
+                    )}
                   </div>
                 </div>
                 {c.invoiceUrl && (
                   <a
                     href={c.invoiceUrl}
                     target="_blank"
-                    className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-bold text-ink-2"
+                    className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-bold text-ink-2 hover:bg-surface-3"
                   >
-                    📎 Vendor invoice
+                    Vendor invoice
                   </a>
                 )}
                 {c.proofUrl && (
                   <a
                     href={c.proofUrl}
                     target="_blank"
-                    className="rounded-lg bg-pine-soft px-3 py-1.5 text-xs font-bold text-pine"
+                    className="rounded-lg bg-ok-soft px-3 py-1.5 text-xs font-bold text-ok"
                   >
-                    ✓ Payment proof
+                    Payment proof
                   </a>
                 )}
-                <span className="rounded-full bg-surface-3 px-2.5 py-1 text-[11px] font-bold uppercase text-ink-2">
-                  {c.status}
-                </span>
+                <StatusPill tone={CHARGE_TONE[c.status] ?? 'neutral'}>{c.status}</StatusPill>
               </div>
 
               {(c.status === 'submitted' || c.status === 'review') && (

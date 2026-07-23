@@ -6,8 +6,18 @@
 // overwritten while someone is typing in it (active-input guard).
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { StatusPill } from '@/components/thermal'
+
+const CHARGE_TONE: Record<string, 'ok' | 'warn' | 'crit' | 'cold' | 'neutral'> = {
+  submitted: 'warn',
+  review: 'cold',
+  approved: 'ok',
+  paid: 'neutral',
+  rejected: 'crit',
+}
 
 type Product = { toast_guid: string; name: string; category: string | null }
 type Line = {
@@ -25,6 +35,7 @@ type Line = {
 export default function ReceivingEditor({
   sessionId,
   sessionMeta,
+  linkedCharge,
   products,
   me,
 }: {
@@ -36,6 +47,7 @@ export default function ReceivingEditor({
     vendorName: string
     workflowType: string
   }
+  linkedCharge: { amountCents: number; status: string } | null
   products: Product[]
   me: { id: string; name: string; role: string }
 }) {
@@ -59,6 +71,9 @@ export default function ReceivingEditor({
   }, [sessionId, supabase])
 
   useEffect(() => {
+    // Initial fetch that seeds the collaborative view, then we subscribe to realtime
+    // updates below — the endorsed "sync with an external system" effect pattern.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLines()
     const channel = supabase
       .channel(`receiving-${sessionId}`)
@@ -210,17 +225,48 @@ export default function ReceivingEditor({
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: `Invoiced (${sessionMeta.workflowType === 'weight' ? 'lb' : 'units'})`, value: totInvoiced, tone: 'text-sea' },
-          { label: 'Received', value: totReceived, tone: 'text-pine' },
-          { label: 'Discrepancies', value: discrepancies, tone: discrepancies ? 'text-coral' : 'text-pine' },
+          { label: `Invoiced (${sessionMeta.workflowType === 'weight' ? 'lb' : 'units'})`, value: totInvoiced, tone: 'text-cold' },
+          { label: 'Received', value: totReceived, tone: 'text-ok' },
+          { label: 'Discrepancies', value: discrepancies, tone: discrepancies ? 'text-crit' : 'text-ok' },
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-line bg-surface p-4 text-center">
-            <div className={`text-2xl font-bold ${s.tone}`}>{s.value}</div>
+            <div className={`tnum text-2xl font-bold ${s.tone}`}>{s.value}</div>
             <div className="mt-1 text-[11px] font-bold uppercase tracking-wide text-ink-3">
               {s.label}
             </div>
           </div>
         ))}
+      </div>
+
+      {/* The provider's invoice for this delivery — the money side of receiving. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-4">
+        <div className="text-sm">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-ink-3">
+            Vendor invoice{sessionMeta.invoiceNo ? ` · ${sessionMeta.invoiceNo}` : ''}
+          </div>
+          {linkedCharge ? (
+            <div className="mt-1 flex items-center gap-2">
+              <span className="tnum text-lg font-bold">
+                ${(linkedCharge.amountCents / 100).toFixed(2)}
+              </span>
+              <StatusPill tone={CHARGE_TONE[linkedCharge.status] ?? 'neutral'}>
+                {linkedCharge.status}
+              </StatusPill>
+            </div>
+          ) : (
+            <div className="mt-1 text-ink-3">
+              {sessionMeta.vendorName} hasn’t submitted a charge for this delivery yet.
+            </div>
+          )}
+        </div>
+        {me.role === 'admin' && (
+          <Link
+            href="/vendors/payments"
+            className="rounded-lg bg-surface-2 px-3 py-2 text-xs font-bold text-ink-2 hover:bg-surface-3"
+          >
+            {linkedCharge ? 'Review in payments →' : 'Accounts payable →'}
+          </Link>
+        )}
       </div>
 
       {!readonly && (
