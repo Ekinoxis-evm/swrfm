@@ -1,33 +1,28 @@
 // Toast order webhook — the fast path that draws down floor stock in near-real-time.
 //
-// Toast POSTs an `order_updated` notification (signed) whenever an order is created, edited,
-// or voided. We verify the signature, fetch the authoritative order(s) by GUID, and reconcile
-// into the floor ledger — the same core the poll cron uses, so the two can't disagree. The
-// poll remains the backstop for anything missed during an outage.
+// Toast POSTs a signed `order_updated` notification whenever an order is created, edited, or
+// voided. Rather than depend on the exact notification shape, we treat it as a "something
+// changed, reconcile now" trigger: verify the signature, then reconcile orders modified since
+// our watermark (bounded lookback) via the same proven ordersBulk path the poll uses. Result:
+// selling N units posts a −N movement at location 'floor'. Idempotent by selection GUID, so a
+// re-delivered or re-modified order never double-counts. The daily poll is the backstop.
 
 import { NextResponse } from 'next/server'
-import { toastToken, fetchOrder, reconcileOrders, verifyToastSignature, type ToastOrder } from '@/lib/toast-sales'
+import {
+  toastToken,
+  fetchOrdersModified,
+  reconcileOrders,
+  verifyToastSignature,
+  getWatermark,
+  setWatermark,
+} from '@/lib/toast-sales'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// Pull order GUIDs out of whatever shape Toast sends (a list of GUIDs, or objects with guids).
-function orderGuids(payload: unknown): string[] {
-  const out = new Set<string>()
-  const visit = (v: unknown) => {
-    if (!v) return
-    if (Array.isArray(v)) return v.forEach(visit)
-    if (typeof v === 'object') {
-      const o = v as Record<string, unknown>
-      if (typeof o.guid === 'string') out.add(o.guid)
-      if (typeof o.orderGuid === 'string') out.add(o.orderGuid as string)
-      for (const k of ['guids', 'orderGuids', 'data', 'orders', 'events']) if (o[k]) visit(o[k])
-    }
-    if (typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v)) out.add(v)
-  }
-  visit(payload)
-  return [...out]
-}
+const KEY = 'toast_sales'
+const OVERLAP_MS = 3 * 60 * 1000 // re-scan a few minutes to catch late edits/voids
+const FIRST_LOOKBACK_MS = 15 * 60 * 1000 // first event: capture the last 15 min of sales
 
 export async function POST(request: Request) {
   const raw = await request.text()
@@ -38,24 +33,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 })
   }
 
-  // Verify the signature over body + timestamp (fail closed once a secret is configured).
   const timestamp = String(payload.timestamp ?? '')
   if (!verifyToastSignature(raw, timestamp, request.headers.get('toast-signature'))) {
     return NextResponse.json({ ok: false, error: 'Bad signature' }, { status: 401 })
   }
 
   try {
-    const guids = orderGuids(payload).filter((g) => g !== timestamp)
-    if (!guids.length) return NextResponse.json({ ok: true, note: 'no order guids' })
+    const now = new Date()
+    const wm = await getWatermark(KEY)
+    const startMs = wm ? new Date(wm).getTime() - OVERLAP_MS : now.getTime() - FIRST_LOOKBACK_MS
+    const start = new Date(startMs).toISOString()
+    const end = now.toISOString()
 
     const token = await toastToken()
-    const orders = (await Promise.all(guids.map((g) => fetchOrder(token, g)))).filter(
-      (o): o is ToastOrder => Boolean(o)
-    )
+    const orders = await fetchOrdersModified(token, start, end)
     const result = await reconcileOrders(orders)
+    await setWatermark(KEY, end)
+
+    console.log(`[toast-webhook] ${result.orders} orders, ${result.movementsPosted} movements, ${result.unitsDrawn} units`)
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
-    // 500 so Toast retries; the poll backstop also covers misses.
+    // 500 so Toast retries; the daily poll also covers misses.
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : 'failed' }, { status: 500 })
   }
 }

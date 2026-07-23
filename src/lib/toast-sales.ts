@@ -151,56 +151,64 @@ export async function reconcileOrders(orders: ToastOrder[], opts: { dryRun?: boo
     if (r.ok) for (const p of (await r.json()) as { toast_guid: string }[]) valid.add(p.toast_guid)
   }
 
-  // What have we already posted for these selections?
-  const selGuids = [...lines.keys()]
+  // For the dry-run preview only: what have we already posted for these selections?
   const posted = new Map<string, number>()
-  for (let i = 0; i < selGuids.length; i += 150) {
-    const chunk = selGuids.slice(i, i + 150)
-    const r = await db(`/toast_sale_lines?select=selection_guid,qty&selection_guid=in.(${chunk.join(',')})`)
-    if (r.ok) for (const l of (await r.json()) as { selection_guid: string; qty: number }[]) posted.set(l.selection_guid, Number(l.qty))
+  if (opts.dryRun) {
+    const selGuids = [...lines.keys()]
+    for (let i = 0; i < selGuids.length; i += 150) {
+      const chunk = selGuids.slice(i, i + 150)
+      const r = await db(`/toast_sale_lines?select=selection_guid,qty&selection_guid=in.(${chunk.join(',')})`)
+      if (r.ok) for (const l of (await r.json()) as { selection_guid: string; qty: number }[]) posted.set(l.selection_guid, Number(l.qty))
+    }
   }
 
-  const movements: Record<string, unknown>[] = []
-  const upserts: Record<string, unknown>[] = []
+  // All mapped selections, with their current net sold qty.
+  const mappedLines: {
+    selection: string
+    order_guid: string
+    toast_guid: string
+    net: number
+    business_date: string | null
+    name: string
+  }[] = []
   for (const [selGuid, line] of lines) {
     if (!valid.has(line.itemGuid)) {
       result.unmapped++
       continue
     }
     result.mapped++
-    const old = posted.get(selGuid) ?? 0
-    const delta = line.net - old // positive = more sold since last time
-    if (delta === 0) continue
-    // Selling `delta` more units removes them from the floor: negative ledger delta.
-    movements.push({
-      toast_guid: line.itemGuid,
-      delta: -delta,
-      location: 'floor',
-      reason: 'sale_toast',
-      ref_id: selGuid,
-      note: `Toast sale · ${line.name}`.slice(0, 120),
-    })
-    upserts.push({
-      selection_guid: selGuid,
+    mappedLines.push({
+      selection: selGuid,
       order_guid: line.orderGuid,
       toast_guid: line.itemGuid,
-      qty: line.net,
+      net: line.net,
       business_date: line.businessDate,
-      updated_at: new Date().toISOString(),
+      name: line.name,
     })
-    result.movementsPosted++
-    result.unitsDrawn += delta
   }
 
-  if (!opts.dryRun && movements.length) {
-    const mv = await db('/inventory_movements', { method: 'POST', body: JSON.stringify(movements) })
-    if (!mv.ok) throw new Error(`post movements ${mv.status}: ${(await mv.text()).slice(0, 160)}`)
-    const up = await db('/toast_sale_lines', {
+  if (opts.dryRun) {
+    // Preview only — compute deltas against what's already posted, write nothing.
+    for (const m of mappedLines) {
+      const delta = m.net - (posted.get(m.selection) ?? 0)
+      if (delta === 0) continue
+      result.movementsPosted++
+      result.unitsDrawn += delta
+    }
+    return result
+  }
+
+  // Real path: one atomic, concurrency-safe call that locks each selection, computes the
+  // delta, and posts the floor movement in a single transaction.
+  if (mappedLines.length) {
+    const r = await db('/rpc/apply_toast_sales', {
       method: 'POST',
-      headers: { Prefer: 'resolution=merge-duplicates' },
-      body: JSON.stringify(upserts),
+      body: JSON.stringify({ p_lines: mappedLines }),
     })
-    if (!up.ok) throw new Error(`upsert sale lines ${up.status}: ${(await up.text()).slice(0, 160)}`)
+    if (!r.ok) throw new Error(`apply_toast_sales ${r.status}: ${(await r.text()).slice(0, 160)}`)
+    const out = (await r.json()) as { posted: number; units: number }
+    result.movementsPosted = Number(out?.posted ?? 0)
+    result.unitsDrawn = Number(out?.units ?? 0)
   }
 
   return result
