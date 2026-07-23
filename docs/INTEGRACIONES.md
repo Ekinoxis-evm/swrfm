@@ -68,6 +68,17 @@ Toast has a **native purchasing & receiving module** that overlaps what we built
 
 Sources: [Toast API overview (full API list)](https://doc.toasttab.com/doc/devguide/apiOverview.html) · [Toast Retail — Generate POs & Receive Inventory](https://support.toasttab.com/en/article/Toast-Retail-Generate-Purchase-Orders-Receive-Inventory) · [xtraCHEF by Toast](https://pos.toasttab.com/products/xtrachef) · [xtraCHEF × QuickBooks](https://xtrachef.com/integration/quickbooks/) · [Toast × xtraCHEF](https://pos.toasttab.com/integrations/xtrachef)
 
+## Sales ingestion — BUILT 2026-07-23 (webhook primary + poll backstop)
+
+Toast sales draw down **floor** stock. Verified: our credentials have `orders:read`; sold-item GUIDs map 1:1 to `products.toast_guid` (200/200 in a 6-day sample).
+
+- **Core:** `src/lib/toast-sales.ts` reconciles orders into the ledger — selling N units posts a −N movement at `location='floor'`, reason `sale_toast`, keyed by Toast **selection GUID**, posting only the *delta* vs. what was already posted. Idempotent; a later void/refund posts the compensating +movement (verified: sale −3, replay 0, void +3, resell −5, edit +3).
+- **Webhook (primary, near-real-time):** `POST /api/webhooks/toast-orders`. Toast `order_updated` → verify `Toast-Signature` (HMAC-SHA256 of `body+timestamp`, base64) → fetch the order(s) by GUID → reconcile. Fail-closed: rejects until `TOAST_WEBHOOK_SECRET` is set.
+- **Poll (backstop):** `GET /api/cron/toast-sales` (Vercel Cron `*/15`, `Authorization: Bearer $CRON_SECRET`) polls `ordersBulk` by modified time since a watermark, 10-min overlap. **First run sets the watermark to _now_ and posts nothing — no historical backfill.** `?dryRun=1&hours=N` previews without writing.
+- **State:** `toast_sale_lines` (net posted per selection), `sync_state` (watermark). RLS: read-only for staff/admin; writes via service key only.
+
+**Setup (Toast Web → create webhook subscription):** category **`order_updated`** (not stock), URL `https://swrfm-demo.vercel.app/api/webhooks/toast-orders`, **enable message signing**, notification email. Then put the generated secret in Vercel as `TOAST_WEBHOOK_SECRET` and set `CRON_SECRET`. Note: sub-daily cron needs Vercel Pro. Floor is only stocked by transfers, so selling without transferring drives floor negative — an intended signal.
+
 ## Shopify — plan
 
 Skills instalados en `.claude/skills/` (disponibles para cualquier sesión de Claude Code en este repo, incluida la de Ruben):

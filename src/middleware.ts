@@ -30,8 +30,13 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   // `/api/cron/*` no usa sesión de navegador: se autentica con CRON_SECRET en su propio
   // handler. Sin esta excepción el middleware lo redirige al login y el cron nunca corre.
+  // `/api/cron/*` and `/api/webhooks/*` authenticate themselves (CRON_SECRET / HMAC),
+  // not a browser session — exempt them or the middleware redirects them to login.
   const isPublic =
-    pathname === '/login' || pathname.startsWith('/auth') || pathname.startsWith('/api/cron')
+    pathname === '/login' ||
+    pathname.startsWith('/auth') ||
+    pathname.startsWith('/api/cron') ||
+    pathname.startsWith('/api/webhooks')
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone()
