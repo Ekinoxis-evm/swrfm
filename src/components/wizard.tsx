@@ -8,12 +8,12 @@ export function WizardSteps({ steps, current }: { steps: string[]; current: numb
       {steps.map((s, i) => (
         <div key={s} className="flex flex-1 items-center gap-2">
           <div
-            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
               i < current
-                ? 'bg-pine text-white'
+                ? 'bg-cold text-white'
                 : i === current
-                  ? 'bg-brand text-white'
-                  : 'bg-surface-3 text-ink-3'
+                  ? 'bg-warm text-white'
+                  : 'border border-line-2 bg-surface-3 text-ink-3'
             }`}
           >
             {i < current ? '✓' : i + 1}

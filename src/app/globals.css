@@ -1,24 +1,50 @@
 @import 'tailwindcss';
 
-/* SWR palette — continuity with the station pages the team already knows */
+/*
+  SWR — sistema bi-thermal. La operación es cadena de frío: el stock vive en el FRÍO
+  (almacén/cooler) y la venta pasa en lo CÁLIDO (piso). Ese es el eje de la identidad.
+
+  Los nombres de token históricos (brand, pine, sea, coral, cream…) se conservan para que
+  todas las clases existentes se reskineen sin tocar cada archivo, pero apuntan a la nueva
+  paleta fría. El vocabulario nuevo — cold/warm (térmico) y ok/warn/crit (semántico) — es el
+  que usa el código nuevo.
+*/
 @theme {
-  --color-cream: #fef9f3;
+  /* Neutros con leve sesgo azul — elegidos, no crema heredada */
+  --color-cream: #eaeef1;      /* fondo de página */
   --color-surface: #ffffff;
-  --color-surface-2: #f5ede3;
-  --color-surface-3: #ede0d0;
-  --color-line: #e0d0be;
-  --color-line-2: #cbbda8;
-  --color-ink: #1f0d10;
-  --color-ink-2: #3d2a2d;
-  --color-ink-3: #7a6060;
-  --color-brand: #8a6a20;
-  --color-brand-soft: #f0e0b0;
-  --color-pine: #58633d;
-  --color-pine-soft: #d8ddca;
-  --color-sea: #24476c;
-  --color-sea-soft: #d0dce8;
-  --color-coral: #a84030;
-  --color-coral-soft: #f0ccc0;
+  --color-surface-2: #f2f5f7;
+  --color-surface-3: #e6ecef;
+  --color-line: #d6dee3;
+  --color-line-2: #c0cbd2;
+  --color-ink: #0f1a1f;
+  --color-ink-2: #3d4d55;
+  --color-ink-3: #6f818a;
+
+  /* Térmico — la firma */
+  --color-cold: #0b7d97;       /* almacén / cooler */
+  --color-cold-soft: #d3ecf1;
+  --color-warm: #bd6a10;       /* piso / venta */
+  --color-warm-soft: #f6e6cb;
+
+  /* Semántico — separado de los acentos */
+  --color-ok: #2f8a4e;
+  --color-ok-soft: #d6ecdc;
+  --color-warn: #b07514;
+  --color-warn-soft: #f6e6cb;
+  --color-crit: #c23c2c;
+  --color-crit-soft: #f4d7d1;
+
+  /* Alias históricos → nueva paleta (para que las clases existentes sigan funcionando) */
+  --color-brand: var(--color-cold);        /* acento primario = frío/almacén */
+  --color-brand-soft: var(--color-cold-soft);
+  --color-pine: var(--color-ok);           /* positivo / recibido */
+  --color-pine-soft: var(--color-ok-soft);
+  --color-sea: #1d6f8a;                     /* enlaces / info */
+  --color-sea-soft: #d3ecf1;
+  --color-coral: var(--color-crit);         /* peligro / merma */
+  --color-coral-soft: var(--color-crit-soft);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -27,4 +53,10 @@ body {
   background: var(--color-cream);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Los números en columnas siempre alineados y monoespaciados-tabulares. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
 }
