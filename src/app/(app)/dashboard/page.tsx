@@ -1,8 +1,22 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getSessionProfile } from '@/lib/supabase/server'
+import { StatusPill } from '@/components/thermal'
 
 export const dynamic = 'force-dynamic'
+
+// How each ledger reason reads in the activity feed.
+const REASON: Record<string, { label: string; tone: 'ok' | 'warn' | 'crit' | 'cold' | 'warm' | 'neutral' }> = {
+  receiving: { label: 'Received', tone: 'cold' },
+  floor_transfer: { label: 'Transfer', tone: 'warm' },
+  break_case: { label: 'Break case', tone: 'neutral' },
+  removal: { label: 'Waste', tone: 'crit' },
+  count_adjust: { label: 'Count', tone: 'neutral' },
+  market_day: { label: 'Market day', tone: 'warm' },
+  sale_toast: { label: 'Toast sale', tone: 'ok' },
+  sale_shopify: { label: 'Shopify sale', tone: 'ok' },
+  manual: { label: 'Manual', tone: 'neutral' },
+}
 
 export default async function DashboardPage() {
   const { supabase, profile } = await getSessionProfile()
@@ -36,10 +50,10 @@ export default async function DashboardPage() {
   ])
 
   const stats = [
-    { label: 'Active products', value: products.count ?? 0, tone: 'text-sea' },
-    { label: 'Out of stock', value: outOfStock.count ?? 0, tone: 'text-coral' },
-    { label: 'Open receivings', value: openSessions.data?.length ?? 0, tone: 'text-pine' },
-    { label: 'Payments to review', value: pendingCharges.data?.length ?? 0, tone: 'text-brand' },
+    { label: 'Active products', value: products.count ?? 0, tone: 'text-cold' },
+    { label: 'Out of stock', value: outOfStock.count ?? 0, tone: 'text-crit' },
+    { label: 'Open receivings', value: openSessions.data?.length ?? 0, tone: 'text-ok' },
+    { label: 'Payments to review', value: pendingCharges.data?.length ?? 0, tone: 'text-warm' },
   ]
 
   return (
@@ -52,7 +66,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="rounded-2xl border border-line bg-surface p-4">
-            <div className={`text-3xl font-bold ${s.tone}`}>{s.value}</div>
+            <div className={`tnum text-3xl font-bold ${s.tone}`}>{s.value}</div>
             <div className="mt-1 text-[11px] font-bold uppercase tracking-wide text-ink-3">
               {s.label}
             </div>
@@ -119,7 +133,7 @@ export default async function DashboardPage() {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-ink-3">Nothing pending. 🎉</p>
+            <p className="text-sm text-ink-3">Nothing pending.</p>
           )}
         </section>
       </div>
@@ -135,10 +149,10 @@ export default async function DashboardPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line-2 text-left text-[11px] uppercase tracking-wide text-ink-3">
+                <tr className="border-b border-line-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3">
                   <th className="py-2 pr-4">When</th>
                   <th className="py-2 pr-4">Product</th>
-                  <th className="py-2 pr-4">Change</th>
+                  <th className="py-2 pr-4 text-right">Change</th>
                   <th className="py-2 pr-4">Reason</th>
                   <th className="py-2">By</th>
                 </tr>
@@ -146,7 +160,7 @@ export default async function DashboardPage() {
               <tbody className="divide-y divide-line">
                 {movements.data.map((m) => (
                   <tr key={m.id}>
-                    <td className="py-2 pr-4 text-ink-3">
+                    <td className="tnum py-2 pr-4 text-ink-3">
                       {new Date(m.created_at).toLocaleString('en-US', {
                         month: 'short',
                         day: 'numeric',
@@ -158,12 +172,16 @@ export default async function DashboardPage() {
                       {(m.products as unknown as { name: string } | null)?.name ?? '—'}
                     </td>
                     <td
-                      className={`py-2 pr-4 font-bold ${Number(m.delta) >= 0 ? 'text-pine' : 'text-coral'}`}
+                      className={`tnum py-2 pr-4 text-right font-bold ${Number(m.delta) >= 0 ? 'text-ok' : 'text-crit'}`}
                     >
                       {Number(m.delta) >= 0 ? '+' : ''}
                       {Number(m.delta)}
                     </td>
-                    <td className="py-2 pr-4">{m.reason}</td>
+                    <td className="py-2 pr-4">
+                      <StatusPill tone={REASON[m.reason]?.tone ?? 'neutral'}>
+                        {REASON[m.reason]?.label ?? m.reason}
+                      </StatusPill>
+                    </td>
                     <td className="py-2 text-ink-3">
                       {(m.profiles as unknown as { full_name: string } | null)?.full_name ?? 'system'}
                     </td>

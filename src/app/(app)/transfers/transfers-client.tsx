@@ -9,6 +9,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { WizardSteps, WizardNav } from '@/components/wizard'
+import DataTable, { type Column } from '@/components/data-table'
+import { StatusPill } from '@/components/thermal'
+
+const STATUS_TONE = { pending: 'warn', approved: 'ok', rejected: 'crit' } as const
 
 export type TransferProduct = {
   toast_guid: string
@@ -337,126 +341,135 @@ export default function Transfers({
         </section>
       )}
 
-      <TransferTable rows={rows} isManager={isManager} busy={busy} run={run} />
+      <DataTable
+        rows={rows}
+        getKey={(r) => r.id}
+        searchText={(r) => `${r.item_name} ${r.requester?.full_name ?? ''}`}
+        searchPlaceholder="Search item or requester…"
+        initialSort={{ key: 'time', dir: 'desc' }}
+        emptyText="No transfers yet today."
+        columns={transferColumns(isManager, busy, run)}
+      />
     </div>
   )
 }
 
-function StatusBadge({ status }: { status: TransferRow['status'] }) {
-  const tone =
-    status === 'approved'
-      ? 'bg-pine-soft text-pine'
-      : status === 'rejected'
-        ? 'bg-coral-soft text-coral'
-        : 'bg-brand-soft text-brand'
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${tone}`}>
-      {status}
-    </span>
-  )
-}
-
-function TransferTable({
-  rows,
-  isManager,
-  busy,
-  run,
-}: {
-  rows: TransferRow[]
-  isManager: boolean
-  busy: boolean
+function transferColumns(
+  isManager: boolean,
+  busy: boolean,
   run: (fn: () => Promise<{ error: { message: string } | null }>, ok?: string) => Promise<boolean>
-}) {
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-line-2 bg-surface-2 text-left text-[11px] uppercase tracking-wide text-ink-3">
-            <th className="px-4 py-3">Time</th>
-            <th className="px-4 py-3">Item</th>
-            <th className="px-4 py-3">Direction</th>
-            <th className="px-4 py-3 text-center">Qty</th>
-            <th className="px-4 py-3">Requested by</th>
-            <th className="px-4 py-3">Status</th>
-            {isManager && <th className="px-4 py-3" />}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {rows.map((r) => (
-            <tr key={r.id}>
-              <td className="px-4 py-2.5 text-ink-3">
-                {new Date(r.requested_at).toLocaleTimeString('en-US', {
-                  timeZone: 'America/New_York',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </td>
-              <td className="px-4 py-2.5 font-semibold">
-                {r.item_name}
-                {r.note && <span className="block text-[11px] font-normal text-ink-3">{r.note}</span>}
-                {r.status === 'rejected' && r.reject_reason && (
-                  <span className="block text-[11px] font-normal text-coral">✕ {r.reject_reason}</span>
-                )}
-              </td>
-              <td className="px-4 py-2.5 text-ink-2">{DIR_LABEL[r.direction]}</td>
-              <td className="px-4 py-2.5 text-center font-bold">{Number(r.qty)}</td>
-              <td className="px-4 py-2.5 text-ink-3">{r.requester?.full_name ?? '—'}</td>
-              <td className="px-4 py-2.5">
-                <StatusBadge status={r.status} />
-                {r.status !== 'pending' && r.decider && (
-                  <span className="ml-1.5 text-[11px] text-ink-3">{r.decider.full_name}</span>
-                )}
-              </td>
-              {isManager && (
-                <td className="whitespace-nowrap px-4 py-2.5 text-right">
-                  {r.status === 'pending' && (
-                    <span className="flex justify-end gap-1.5">
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          run(async () => {
-                            const supabase = createClient()
-                            const { error } = await supabase.rpc('approve_transfer', { p_id: r.id })
-                            return { error }
-                          }, 'Transfer approved — stock moved.')
-                        }
-                        className="rounded-lg bg-pine px-3 py-1 text-xs font-bold text-white disabled:opacity-40"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => {
-                          const reason = window.prompt('Reason for rejecting? (optional)')
-                          if (reason === null) return
-                          run(async () => {
-                            const supabase = createClient()
-                            const { error } = await supabase.rpc('reject_transfer', {
-                              p_id: r.id,
-                              p_reason: reason || null,
-                            })
-                            return { error }
-                          }, 'Transfer rejected.')
-                        }}
-                        className="rounded-lg bg-coral-soft px-3 py-1 text-xs font-bold text-coral disabled:opacity-40"
-                      >
-                        Reject
-                      </button>
-                    </span>
-                  )}
-                </td>
-              )}
-            </tr>
-          ))}
-          {!rows.length && (
-            <tr>
-              <td colSpan={isManager ? 7 : 6} className="px-4 py-6 text-center text-ink-3">
-                No transfers yet today.
-              </td>
-            </tr>
+): Column<TransferRow>[] {
+  const cols: Column<TransferRow>[] = [
+    {
+      key: 'time',
+      header: 'Time',
+      sortValue: (r) => r.requested_at,
+      render: (r) => (
+        <span className="tnum text-ink-3">
+          {new Date(r.requested_at).toLocaleTimeString('en-US', {
+            timeZone: 'America/New_York',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      ),
+    },
+    {
+      key: 'item',
+      header: 'Item',
+      sortValue: (r) => r.item_name.toLowerCase(),
+      render: (r) => (
+        <>
+          <span className="font-semibold">{r.item_name}</span>
+          {r.note && <span className="block text-[11px] text-ink-3">{r.note}</span>}
+          {r.status === 'rejected' && r.reject_reason && (
+            <span className="block text-[11px] text-crit">✕ {r.reject_reason}</span>
           )}
-        </tbody>
-      </table>
-    </div>
-  )
+        </>
+      ),
+    },
+    {
+      key: 'direction',
+      header: 'Direction',
+      sortValue: (r) => r.direction,
+      render: (r) => (
+        <span className={r.direction === 'to_floor' ? 'text-warm' : 'text-cold'}>
+          {DIR_LABEL[r.direction]}
+        </span>
+      ),
+    },
+    {
+      key: 'qty',
+      header: 'Qty',
+      align: 'right',
+      sortValue: (r) => Number(r.qty),
+      render: (r) => <span className="font-bold">{Number(r.qty)}</span>,
+    },
+    {
+      key: 'by',
+      header: 'Requested by',
+      sortValue: (r) => (r.requester?.full_name ?? '').toLowerCase(),
+      render: (r) => <span className="text-ink-3">{r.requester?.full_name ?? '—'}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortValue: (r) => r.status,
+      render: (r) => (
+        <span className="inline-flex items-center gap-1.5">
+          <StatusPill tone={STATUS_TONE[r.status]}>{r.status}</StatusPill>
+          {r.status !== 'pending' && r.decider && (
+            <span className="text-[11px] text-ink-3">{r.decider.full_name}</span>
+          )}
+        </span>
+      ),
+    },
+  ]
+
+  if (isManager) {
+    cols.push({
+      key: 'actions',
+      header: '',
+      align: 'right',
+      width: '1%',
+      render: (r) =>
+        r.status === 'pending' ? (
+          <span className="flex justify-end gap-1.5">
+            <button
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  const supabase = createClient()
+                  const { error } = await supabase.rpc('approve_transfer', { p_id: r.id })
+                  return { error }
+                }, 'Transfer approved — stock moved.')
+              }
+              className="rounded-lg bg-ok px-3 py-1 text-xs font-bold text-white disabled:opacity-40"
+            >
+              Approve
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => {
+                const reason = window.prompt('Reason for rejecting? (optional)')
+                if (reason === null) return
+                run(async () => {
+                  const supabase = createClient()
+                  const { error } = await supabase.rpc('reject_transfer', {
+                    p_id: r.id,
+                    p_reason: reason || null,
+                  })
+                  return { error }
+                }, 'Transfer rejected.')
+              }}
+              className="rounded-lg bg-crit-soft px-3 py-1 text-xs font-bold text-crit disabled:opacity-40"
+            >
+              Reject
+            </button>
+          </span>
+        ) : null,
+    })
+  }
+
+  return cols
 }

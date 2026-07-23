@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { REMOVAL_SELECT } from '@/lib/market-day'
+import DataTable, { type Column } from '@/components/data-table'
+import { StatusPill } from '@/components/thermal'
 
 export type CoolerProduct = {
   toast_guid: string
@@ -307,154 +309,206 @@ export default function RemovalLog({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-line-2 bg-surface-2 text-left text-[11px] uppercase tracking-wide text-ink-3">
-              <th className="px-4 py-3">Time</th>
-              <th className="px-4 py-3">Item</th>
-              <th className="px-4 py-3">Vendor</th>
-              <th className="px-4 py-3 text-center">Qty</th>
-              <th className="px-4 py-3 text-right">Weight</th>
-              <th className="px-4 py-3">By</th>
-              <th className="px-4 py-3">Manager sign-off</th>
-              {isManager && <th className="px-4 py-3" />}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {rows.map((r) => (
-              <tr key={r.id} className={r.voided_at ? 'text-ink-3 line-through opacity-60' : ''}>
-                <td className="px-4 py-2.5 text-ink-3">
-                  {new Date(r.created_at).toLocaleTimeString('en-US', {
-                    timeZone: 'America/New_York',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </td>
-                <td className="px-4 py-2.5 font-semibold">
-                  {r.item_name}
-                  {r.edited_at && (
-                    <span className="ml-1.5 text-[10px] font-bold uppercase text-ink-3">edited</span>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-ink-3">{r.vendor_name ?? '—'}</td>
-                <td className="px-4 py-2.5 text-center">
-                  {editing === r.id ? (
-                    <span className="flex items-center justify-center gap-1">
-                      <input
-                        autoFocus
-                        type="number"
-                        min={1}
-                        value={editQty}
-                        onChange={(e) => setEditQty(Math.max(1, Number(e.target.value) || 1))}
-                        className="w-16 rounded-lg border border-brand bg-cream px-2 py-1 text-center font-bold outline-none"
-                      />
-                      <button
-                        disabled={busy}
-                        onClick={async () => {
-                          await run(async () => {
-                            const supabase = createClient()
-                            const { error } = await supabase.rpc('update_removal', {
-                              p_id: r.id,
-                              p_qty: editQty,
-                            })
-                            return { error }
-                          })
-                          setEditing(null)
-                        }}
-                        className="rounded-lg bg-pine px-2 py-1 text-xs font-bold text-white"
-                      >
-                        ✓
-                      </button>
-                      <button
-                        onClick={() => setEditing(null)}
-                        className="rounded-lg bg-surface-3 px-2 py-1 text-xs font-bold text-ink-3"
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  ) : (
-                    <>
-                      <b>{Number(r.qty)}</b>{' '}
-                      <span className="text-[11px] text-ink-3">{r.remove_by}</span>
-                    </>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  {Number(r.weight_lb) > 0 ? `${Number(r.weight_lb).toFixed(1)} lb` : '—'}
-                </td>
-                <td className="px-4 py-2.5 text-ink-3">{r.removed?.full_name ?? '—'}</td>
-                <td className="px-4 py-2.5">
-                  {r.voided_at ? (
-                    <span className="font-semibold">voided{r.void_reason ? ` · ${r.void_reason}` : ''}</span>
-                  ) : r.signed_at ? (
-                    <span className="font-semibold text-pine">✓ {r.signer?.full_name ?? 'signed'}</span>
-                  ) : isManager ? (
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        run(async () => {
-                          const supabase = createClient()
-                          const { error } = await supabase.rpc('sign_removal', { p_id: r.id })
-                          return { error }
-                        })
-                      }
-                      className="rounded-lg bg-brand-soft px-3 py-1 text-xs font-bold text-brand disabled:opacity-40"
-                    >
-                      Sign
-                    </button>
-                  ) : (
-                    <span className="text-coral">⚠ unsigned</span>
-                  )}
-                </td>
-                {isManager && (
-                  <td className="whitespace-nowrap px-4 py-2.5 text-right">
-                    {!r.voided_at && editing !== r.id && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setEditing(r.id)
-                            setEditQty(Number(r.qty))
-                          }}
-                          title="Edit quantity (the ledger is corrected)"
-                          className="rounded-lg px-2 py-1 text-xs font-bold text-ink-3 hover:bg-surface-2"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          onClick={() => {
-                            const reason = window.prompt('Reason for voiding this removal?')
-                            if (reason === null) return
-                            run(async () => {
-                              const supabase = createClient()
-                              const { error } = await supabase.rpc('void_removal', {
-                                p_id: r.id,
-                                p_reason: reason || null,
-                              })
-                              return { error }
-                            })
-                          }}
-                          title="Void (stock is returned)"
-                          className="rounded-lg px-2 py-1 text-xs font-bold text-coral hover:bg-coral-soft"
-                        >
-                          ✕
-                        </button>
-                      </>
-                    )}
-                  </td>
-                )}
-              </tr>
-            ))}
-            {!rows.length && (
-              <tr>
-                <td colSpan={isManager ? 8 : 7} className="px-4 py-6 text-center text-ink-3">
-                  No removals today.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        rows={rows}
+        getKey={(r) => r.id}
+        searchText={(r) => `${r.item_name} ${r.vendor_name ?? ''} ${r.removed?.full_name ?? ''}`}
+        searchPlaceholder="Search item, vendor, or person…"
+        initialSort={{ key: 'time', dir: 'desc' }}
+        emptyText="No removals today."
+        columns={removalColumns({
+          isManager,
+          busy,
+          run,
+          editing,
+          editQty,
+          setEditing,
+          setEditQty,
+        })}
+      />
     </div>
   )
+}
+
+function removalColumns({
+  isManager,
+  busy,
+  run,
+  editing,
+  editQty,
+  setEditing,
+  setEditQty,
+}: {
+  isManager: boolean
+  busy: boolean
+  run: (fn: () => Promise<{ error: { message: string } | null }>, ok?: string) => Promise<boolean>
+  editing: string | null
+  editQty: number
+  setEditing: (id: string | null) => void
+  setEditQty: (n: number) => void
+}): Column<RemovalRow>[] {
+  const cols: Column<RemovalRow>[] = [
+    {
+      key: 'time',
+      header: 'Time',
+      sortValue: (r) => r.created_at,
+      render: (r) => (
+        <span className="tnum text-ink-3">
+          {new Date(r.created_at).toLocaleTimeString('en-US', {
+            timeZone: 'America/New_York',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      ),
+    },
+    {
+      key: 'item',
+      header: 'Item',
+      sortValue: (r) => r.item_name.toLowerCase(),
+      render: (r) => (
+        <span className={r.voided_at ? 'text-ink-3 line-through' : 'font-semibold'}>
+          {r.item_name}
+          {r.edited_at && (
+            <span className="ml-1.5 text-[10px] font-bold uppercase text-ink-3 no-underline">edited</span>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: 'vendor',
+      header: 'Vendor',
+      sortValue: (r) => (r.vendor_name ?? '').toLowerCase(),
+      render: (r) => <span className="text-ink-3">{r.vendor_name ?? '—'}</span>,
+    },
+    {
+      key: 'qty',
+      header: 'Qty',
+      align: 'right',
+      sortValue: (r) => Number(r.qty),
+      render: (r) =>
+        editing === r.id ? (
+          <span className="flex items-center justify-end gap-1">
+            <input
+              autoFocus
+              type="number"
+              min={1}
+              value={editQty}
+              onChange={(e) => setEditQty(Math.max(1, Number(e.target.value) || 1))}
+              className="tnum w-16 rounded-lg border border-cold bg-surface-2 px-2 py-1 text-right font-bold outline-none"
+            />
+            <button
+              disabled={busy}
+              onClick={async () => {
+                await run(async () => {
+                  const supabase = createClient()
+                  const { error } = await supabase.rpc('update_removal', { p_id: r.id, p_qty: editQty })
+                  return { error }
+                })
+                setEditing(null)
+              }}
+              className="rounded-lg bg-cold px-2 py-1 text-xs font-bold text-white"
+            >
+              ✓
+            </button>
+            <button
+              onClick={() => setEditing(null)}
+              className="rounded-lg bg-surface-3 px-2 py-1 text-xs font-bold text-ink-3"
+            >
+              ✕
+            </button>
+          </span>
+        ) : (
+          <span className={r.voided_at ? 'text-ink-3 line-through' : ''}>
+            <b>{Number(r.qty)}</b> <span className="text-[11px] text-ink-3">{r.remove_by}</span>
+          </span>
+        ),
+    },
+    {
+      key: 'weight',
+      header: 'Weight',
+      align: 'right',
+      sortValue: (r) => Number(r.weight_lb),
+      render: (r) =>
+        Number(r.weight_lb) > 0 ? (
+          <span>{Number(r.weight_lb).toFixed(1)} lb</span>
+        ) : (
+          <span className="text-ink-3">—</span>
+        ),
+    },
+    {
+      key: 'by',
+      header: 'By',
+      sortValue: (r) => (r.removed?.full_name ?? '').toLowerCase(),
+      render: (r) => <span className="text-ink-3">{r.removed?.full_name ?? '—'}</span>,
+    },
+    {
+      key: 'signoff',
+      header: 'Sign-off',
+      sortValue: (r) => (r.voided_at ? 'z' : r.signed_at ? 'a' : 'm'),
+      render: (r) =>
+        r.voided_at ? (
+          <StatusPill tone="neutral">voided{r.void_reason ? ` · ${r.void_reason}` : ''}</StatusPill>
+        ) : r.signed_at ? (
+          <StatusPill tone="ok">✓ {r.signer?.full_name ?? 'signed'}</StatusPill>
+        ) : isManager ? (
+          <button
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                const supabase = createClient()
+                const { error } = await supabase.rpc('sign_removal', { p_id: r.id })
+                return { error }
+              })
+            }
+            className="rounded-lg bg-cold-soft px-3 py-1 text-xs font-bold text-cold disabled:opacity-40"
+          >
+            Sign
+          </button>
+        ) : (
+          <StatusPill tone="warn">unsigned</StatusPill>
+        ),
+    },
+  ]
+
+  if (isManager) {
+    cols.push({
+      key: 'actions',
+      header: '',
+      align: 'right',
+      width: '1%',
+      render: (r) =>
+        !r.voided_at && editing !== r.id ? (
+          <span className="flex justify-end gap-1">
+            <button
+              onClick={() => {
+                setEditing(r.id)
+                setEditQty(Number(r.qty))
+              }}
+              title="Edit quantity (the ledger is corrected)"
+              className="rounded-lg px-2 py-1 text-xs font-bold text-ink-3 hover:bg-surface-2"
+            >
+              ✎
+            </button>
+            <button
+              onClick={() => {
+                const reason = window.prompt('Reason for voiding this removal?')
+                if (reason === null) return
+                run(async () => {
+                  const supabase = createClient()
+                  const { error } = await supabase.rpc('void_removal', { p_id: r.id, p_reason: reason || null })
+                  return { error }
+                })
+              }}
+              title="Void (stock is returned)"
+              className="rounded-lg px-2 py-1 text-xs font-bold text-crit hover:bg-crit-soft"
+            >
+              ✕
+            </button>
+          </span>
+        ) : null,
+    })
+  }
+
+  return cols
 }
