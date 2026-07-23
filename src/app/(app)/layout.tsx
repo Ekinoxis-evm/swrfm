@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { getSessionProfile } from '@/lib/supabase/server'
 import SignOutButton from '@/components/sign-out-button'
 import NavLinks from '@/components/nav-links'
@@ -38,8 +39,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen">
       <header className="sticky top-0 z-50 border-b-2 border-line-2 bg-surface-3/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <Link href="/" className="text-base font-bold tracking-tight">
-            SWR <span className="text-brand">{'//'}</span> Inventory
+          <Link href="/" className="flex items-center gap-2 text-base font-bold tracking-tight">
+            <Image src="/swrfm-logo.png" alt="" width={26} height={25} className="h-6 w-auto" priority />
+            SWRFM Master
           </Link>
           <nav className="hidden gap-1 sm:flex">
             <NavLinks items={NAV[profile.role]} />

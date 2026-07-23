@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -142,9 +143,15 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="text-2xl font-bold tracking-tight">
-            SWR <span className="text-brand">{'//'}</span> Cooler System
-          </div>
+          <Image
+            src="/swrfm-logo.png"
+            alt="Southwest Ranches Farmers Market"
+            width={64}
+            height={61}
+            className="mx-auto mb-3 h-16 w-auto"
+            priority
+          />
+          <div className="text-2xl font-bold tracking-tight">SWRFM Master</div>
           <div className="mt-1 text-sm text-ink-3">Southwest Ranches Farmers Market</div>
         </div>
 
