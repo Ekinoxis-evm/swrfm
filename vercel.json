@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/toast-sales",
-      "schedule": "*/15 * * * *"
+      "schedule": "20 4 * * *"
     }
   ]
 }
