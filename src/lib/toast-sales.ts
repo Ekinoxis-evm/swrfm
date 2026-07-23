@@ -51,7 +51,9 @@ function toastHeaders(token: string) {
 export async function fetchOrdersModified(token: string, startISO: string, endISO: string) {
   const host = process.env.TOAST_API_HOST
   const orders: ToastOrder[] = []
-  for (let page = 1; page <= 50; page++) {
+  const MAX_PAGES = 50
+  let truncated = false
+  for (let page = 1; page <= MAX_PAGES; page++) {
     const url = `${host}/orders/v2/ordersBulk?startDate=${startISO}&endDate=${endISO}&pageSize=100&page=${page}`
     const r = await fetch(url, { headers: toastHeaders(token), cache: 'no-store' })
     if (!r.ok) throw new Error(`ordersBulk ${r.status}`)
@@ -59,6 +61,11 @@ export async function fetchOrdersModified(token: string, startISO: string, endIS
     if (!Array.isArray(arr) || arr.length === 0) break
     orders.push(...arr)
     if (arr.length < 100) break
+    if (page === MAX_PAGES) truncated = true // a full last page means more may exist
+  }
+  if (truncated) {
+    // Surface silent truncation (e.g. a huge dry-run window or a multi-day catch-up).
+    console.warn(`[toast-sales] ordersBulk hit the ${MAX_PAGES}-page cap for ${startISO}..${endISO} — window may be truncated`)
   }
   return orders
 }
