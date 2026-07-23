@@ -5,6 +5,35 @@ import { StatusPill } from '@/components/thermal'
 
 export const dynamic = 'force-dynamic'
 
+// Short relative time, e.g. "2 days ago", from an ISO timestamp.
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return 'never'
+  const secs = Math.round((Date.now() - new Date(iso).getTime()) / 1000)
+  const units: [number, string][] = [
+    [60, 'second'],
+    [60, 'minute'],
+    [24, 'hour'],
+    [7, 'day'],
+    [4.35, 'week'],
+    [12, 'month'],
+    [Number.POSITIVE_INFINITY, 'year'],
+  ]
+  let v = secs
+  for (const [size, name] of units) {
+    if (v < size) {
+      const n = Math.max(1, Math.floor(v))
+      return `${n} ${name}${n === 1 ? '' : 's'} ago`
+    }
+    v /= size
+  }
+  return 'a while ago'
+}
+
+// Hours since an ISO timestamp (kept out of the render body so the time read is contained).
+function hoursSince(iso: string | null): number {
+  return iso ? (Date.now() - new Date(iso).getTime()) / 3.6e6 : Number.POSITIVE_INFINITY
+}
+
 // How each ledger reason reads in the activity feed.
 const REASON: Record<string, { label: string; tone: 'ok' | 'warn' | 'crit' | 'cold' | 'warm' | 'neutral' }> = {
   receiving: { label: 'Received', tone: 'cold' },
@@ -23,7 +52,17 @@ export default async function DashboardPage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'admin') redirect('/')
 
-  const [products, outOfStock, openSessions, pendingCharges, movements] = await Promise.all([
+  const [
+    products,
+    outOfStock,
+    openSessions,
+    pendingCharges,
+    movements,
+    archived,
+    shopifyLinked,
+    noBarcode,
+    lastSyncRow,
+  ] = await Promise.all([
     supabase
       .from('products')
       .select('toast_guid', { count: 'exact', head: true })
@@ -47,7 +86,27 @@ export default async function DashboardPage() {
       .select('id, delta, reason, created_at, products(name), profiles(full_name)')
       .order('created_at', { ascending: false })
       .limit(10),
+    // Channel-sync health
+    supabase.from('products').select('toast_guid', { count: 'exact', head: true }).not('archived_at', 'is', null),
+    supabase
+      .from('products')
+      .select('toast_guid', { count: 'exact', head: true })
+      .is('archived_at', null)
+      .not('shopify_handle', 'is', null),
+    supabase
+      .from('products')
+      .select('toast_guid', { count: 'exact', head: true })
+      .is('archived_at', null)
+      .is('barcode', null),
+    supabase.from('products').select('synced_at').order('synced_at', { ascending: false }).limit(1).maybeSingle(),
   ])
+
+  const activeCount = products.count ?? 0
+  const archivedCount = archived.count ?? 0
+  const shopifyCount = shopifyLinked.count ?? 0
+  const noBarcodeCount = noBarcode.count ?? 0
+  const lastSync = (lastSyncRow.data as { synced_at: string } | null)?.synced_at ?? null
+  const syncAgeHours = hoursSince(lastSync)
 
   const stats = [
     { label: 'Active products', value: products.count ?? 0, tone: 'text-cold' },
@@ -196,6 +255,86 @@ export default async function DashboardPage() {
             full attribution.
           </p>
         )}
+      </section>
+
+      <section className="rounded-2xl border border-line bg-surface p-5">
+        <div className="mb-4">
+          <h2 className="font-bold">Channel sync</h2>
+          <p className="text-sm text-ink-3">
+            Toast and Shopify stay the source of names, prices, and sales. This is the safety-net
+            view of how current the master is.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-line bg-surface-2 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold">Toast catalog</h3>
+              <StatusPill tone={syncAgeHours < 26 ? 'ok' : syncAgeHours < 24 * 7 ? 'warn' : 'crit'}>
+                {syncAgeHours < 26 ? 'fresh' : 'stale'}
+              </StatusPill>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">Menus V2 · last synced {relativeTime(lastSync)}</p>
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-[11px] font-bold uppercase tracking-wide text-ink-3">Active</dt>
+                <dd className="tnum text-lg font-bold text-cold">{activeCount}</dd>
+              </div>
+              <div>
+                <dt className="text-[11px] font-bold uppercase tracking-wide text-ink-3">
+                  Dropped from Toast
+                </dt>
+                <dd className="tnum text-lg font-bold text-ink-2">{archivedCount}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="rounded-xl border border-line bg-surface-2 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold">Shopify</h3>
+              <StatusPill tone={shopifyCount ? 'cold' : 'neutral'}>
+                {activeCount ? `${Math.round((shopifyCount / activeCount) * 100)}% linked` : '—'}
+              </StatusPill>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">Admin GraphQL · matched by barcode / name</p>
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-[11px] font-bold uppercase tracking-wide text-ink-3">Linked</dt>
+                <dd className="tnum text-lg font-bold text-cold">{shopifyCount}</dd>
+              </div>
+              <div>
+                <dt className="text-[11px] font-bold uppercase tracking-wide text-ink-3">Unlinked</dt>
+                <dd className="tnum text-lg font-bold text-ink-2">
+                  {Math.max(0, activeCount - shopifyCount)}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+
+        {noBarcodeCount > 0 && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-warn-soft bg-warn-soft px-4 py-2.5 text-sm">
+            <StatusPill tone="warn">Gap</StatusPill>
+            <span className="text-ink-2">
+              <b className="tnum">{noBarcodeCount}</b> active products have no barcode — the key that
+              links Toast to Shopify and enables case/unit handling.
+            </span>
+          </div>
+        )}
+
+        {/* Discovered: Toast has native purchasing/receiving that overlaps ours. */}
+        <div className="mt-3 rounded-xl border border-dashed border-line-2 px-4 py-3 text-sm">
+          <div className="flex items-center gap-2">
+            <StatusPill tone="neutral">Not connected</StatusPill>
+            <span className="font-semibold">Toast Purchasing &amp; Receiving</span>
+          </div>
+          <p className="mt-1.5 text-ink-2">
+            Toast has a native purchasing module (Retail → Purchasing) plus xtraCHEF for
+            line-item invoice capture — it overlaps our receiving and vendor invoices. Today those
+            live in this app; connecting Toast’s module is a roadmap decision. See{' '}
+            <span className="font-mono text-xs">docs/INTEGRACIONES.md</span>.
+          </p>
+        </div>
       </section>
     </div>
   )

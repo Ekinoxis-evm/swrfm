@@ -40,6 +40,20 @@ SHOPIFY_API_VERSION=2026-01
 
 **Arquitectura de sync:** webhook Orders como primario + poll de reconciliación `ordersBulk` (ventana deslizante por modified-time, cada 1–5 min) + catálogo por `/metadata` horario.
 
+## Toast Purchasing & Receiving + xtraCHEF — discovered 2026-07-23 (roadmap)
+
+> Note: this section is in English — the working language is being switched app-wide (the rest of this doc will follow in the pending English migration).
+
+Toast has a **native purchasing & receiving module** that overlaps what we built in this app (our `receiving_sessions` / `receiving_lines` + `vendor_charges`). Worth a deliberate build-vs-integrate decision before we invest more in our own AP/receiving.
+
+- **Purchasing & Receiving** (Toast Web → Retail → Purchasing): create/manage purchase orders, or **receive by invoice**; up to 500 items per PO/invoice.
+- **xtraCHEF by Toast** (acquired 2021, now the inventory/food-cost layer): digitizes vendor invoices and extracts **line-item** detail, automates AP, reconciles vendor statements against captured invoices, and builds par-based order guides you can send to vendors.
+- **Caveat:** Toast Retail does **not** currently have automatic invoice capture (with or without xtraCHEF) — capture is via xtraCHEF's own flow.
+
+**Implication for us:** our receiving + vendor-invoice/AP flow could eventually be **fed by** Toast's module rather than duplicated. This is a different surface from Menus V2 / Orders (likely a separate API / access tier — to confirm). Surfaced in the dashboard "Channel sync" section as *not connected*. Decision pending with the admin.
+
+Sources: [Toast Retail — Generate POs & Receive Inventory](https://support.toasttab.com/en/article/Toast-Retail-Generate-Purchase-Orders-Receive-Inventory) · [xtraCHEF by Toast](https://pos.toasttab.com/products/xtrachef) · [Toast × xtraCHEF integration](https://pos.toasttab.com/integrations/xtrachef)
+
 ## Shopify — plan
 
 Skills instalados en `.claude/skills/` (disponibles para cualquier sesión de Claude Code en este repo, incluida la de Ruben):
