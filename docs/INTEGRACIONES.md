@@ -50,9 +50,23 @@ Toast has a **native purchasing & receiving module** that overlaps what we built
 - **xtraCHEF by Toast** (acquired 2021, now the inventory/food-cost layer): digitizes vendor invoices and extracts **line-item** detail, automates AP, reconciles vendor statements against captured invoices, and builds par-based order guides you can send to vendors.
 - **Caveat:** Toast Retail does **not** currently have automatic invoice capture (with or without xtraCHEF) — capture is via xtraCHEF's own flow.
 
-**Implication for us:** our receiving + vendor-invoice/AP flow could eventually be **fed by** Toast's module rather than duplicated. This is a different surface from Menus V2 / Orders (likely a separate API / access tier — to confirm). Surfaced in the dashboard "Channel sync" section as *not connected*. Decision pending with the admin.
+**API access — investigated 2026-07-23 (conclusive):**
 
-Sources: [Toast Retail — Generate POs & Receive Inventory](https://support.toasttab.com/en/article/Toast-Retail-Generate-Purchase-Orders-Receive-Inventory) · [xtraCHEF by Toast](https://pos.toasttab.com/products/xtrachef) · [Toast × xtraCHEF integration](https://pos.toasttab.com/integrations/xtrachef)
+- **The standard Toast public API has NO purchasing / receiving / invoice / AP / xtraCHEF endpoints.** The full public surface is: Analytics, Cash management, Configuration, Credit cards, Device details, Gift cards, Kitchen, Labor, Loyalty, **Menus**, **Orders**, Order-management config, Packaging config, Partners, Restaurant availability, Restaurants, **Stock** (86'ing only), Tender. So the module is **not** reachable via the credentials we have (menus/orders/etc.).
+- **Toast Retail → Purchasing & Receiving** (POs, receive-by-invoice) is a **Toast Web UI module** — no public API. Toast Retail also has **no automatic invoice capture**.
+- **xtraCHEF** is where line-item invoice capture lives, but its data **egresses outbound**, not via a self-serve inbound REST API: its "Sync" feature pushes coded invoices + Toast sales **into accounting systems** (e.g. QuickBooks Online), plus file/CSV exports. Partner/API integrations are **case-by-case** via `support@xtrachef.com` / Toast's partner ecosystem — not self-serve.
+
+**So "feed, don't rebuild" cannot be a simple API wire-up.** Realistic feed paths, best-first:
+
+1. **xtraCHEF invoice export (CSV) → importer script** (fits our zero-dep `scripts/` pattern): ingest captured line-item invoices into `vendor_charges` (link to `receiving_sessions` by vendor + invoice #) and optionally seed `receiving_lines`. Lets xtraCHEF do the OCR/line-item capture while our master stays the hub.
+2. **Partner data feed** from xtraCHEF/Toast (contact `support@xtrachef.com`) — cleaner pipeline if granted; likely gated/paid.
+3. **QuickBooks as the hub** — if SWR runs xtraCHEF → QuickBooks Sync, read purchasing/AP from QuickBooks instead.
+
+**Open decision (needs the admin):** does SWR actually use xtraCHEF / Toast Retail Purchasing today? If **yes** → build path 1 (CSV import) and confirm export access. If **no** → adopting xtraCHEF (for automatic invoice OCR) vs. keeping our current vendor-submitted-charge flow is a cost/workflow call before any feed exists.
+
+**Target architecture (master = hub, everything feeds in):** catalog ← Toast Menus V2; sales ← Toast Orders + Shopify; purchasing/AP ← xtraCHEF export (path 1). Surfaced in the dashboard "Channel sync" section as *not connected* until a path is chosen.
+
+Sources: [Toast API overview (full API list)](https://doc.toasttab.com/doc/devguide/apiOverview.html) · [Toast Retail — Generate POs & Receive Inventory](https://support.toasttab.com/en/article/Toast-Retail-Generate-Purchase-Orders-Receive-Inventory) · [xtraCHEF by Toast](https://pos.toasttab.com/products/xtrachef) · [xtraCHEF × QuickBooks](https://xtrachef.com/integration/quickbooks/) · [Toast × xtraCHEF](https://pos.toasttab.com/integrations/xtrachef)
 
 ## Shopify — plan
 
