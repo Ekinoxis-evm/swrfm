@@ -13,6 +13,7 @@ import {
   getWatermark,
   setWatermark,
 } from '@/lib/toast-sales'
+import { syncCatalogFromToast } from '@/lib/toast-catalog'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -57,7 +58,17 @@ export async function GET(request: Request) {
     const orders = await fetchOrdersModified(token, start, nowISO)
     const result = await reconcileOrders(orders)
     await setWatermark(KEY, nowISO)
-    return NextResponse.json({ ok: true, window: { start, end: nowISO }, ...result })
+
+    // Also refresh the catalog (names/prices) from Menus V2 — folded in here so we stay
+    // within the 2-cron plan limit. Best-effort: a catalog error never fails the sales run.
+    let catalog: unknown
+    try {
+      catalog = await syncCatalogFromToast()
+    } catch (e) {
+      catalog = { error: e instanceof Error ? e.message : 'catalog sync failed' }
+    }
+
+    return NextResponse.json({ ok: true, window: { start, end: nowISO }, sales: result, catalog })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : 'Sync failed' }, { status: 500 })
   }

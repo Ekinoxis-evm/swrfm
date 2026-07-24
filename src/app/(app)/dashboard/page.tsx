@@ -85,6 +85,7 @@ export default async function DashboardPage() {
     noBarcode,
     lastSyncRow,
     salesToday,
+    catalogState,
   ] = await Promise.all([
     supabase
       .from('products')
@@ -130,13 +131,19 @@ export default async function DashboardPage() {
       .gte('created_at', startOfMarketDayISO())
       .order('created_at', { ascending: false })
       .limit(5000),
+    // Last catalog-sync run (recorded by the daily cron)
+    supabase.from('sync_state').select('watermark').eq('key', 'toast_catalog').maybeSingle(),
   ])
 
   const activeCount = products.count ?? 0
   const archivedCount = archived.count ?? 0
   const shopifyCount = shopifyLinked.count ?? 0
   const noBarcodeCount = noBarcode.count ?? 0
-  const lastSync = (lastSyncRow.data as { synced_at: string } | null)?.synced_at ?? null
+  // Prefer the recorded catalog-sync run time; fall back to the newest product sync.
+  const lastSync =
+    (catalogState.data as { watermark: string } | null)?.watermark ??
+    (lastSyncRow.data as { synced_at: string } | null)?.synced_at ??
+    null
   const syncAgeHours = hoursSince(lastSync)
 
   // Toast sales today
